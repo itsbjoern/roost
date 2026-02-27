@@ -1,0 +1,141 @@
+//! Serve config: mapping add/remove/list, config merge.
+
+use anyhow::Result;
+use std::collections::HashMap;
+use std::fs;
+use std::io::{Read, Write};
+use std::path::Path;
+
+use serde::{Deserialize, Serialize};
+
+/// Source of a mapping for list output.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MappingSource {
+    Project,
+    Global,
+}
+
+/// Single mapping: domain -> port.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Mapping {
+    pub domain: String,
+    pub port: u16,
+}
+
+/// Top-level .roostrc file format (has [serve] section).
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+struct RoostRc {
+    #[serde(default)]
+    serve: ServeConfig,
+}
+
+/// Serve config (from .roostrc or global).
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ServeConfig {
+    #[serde(default)]
+    pub mappings: Vec<Mapping>,
+}
+
+impl ServeConfig {
+    /// Load serve config from path. Uses advisory lock when file exists.
+    pub fn load(path: &Path) -> Result<Self> {
+        if path.is_file() {
+            let mut file = fs::OpenOptions::new().read(true).open(path)?;
+            let _lock = fs2::FileExt::lock_shared(&file)?;
+            let mut s = String::new();
+            file.read_to_string(&mut s)?;
+            drop(_lock);
+            let rc: RoostRc = toml::from_str(&s)?;
+            let mut cfg = rc.serve;
+            cfg.mappings.retain(|m| !m.domain.is_empty());
+            Ok(cfg)
+        } else {
+            Ok(ServeConfig::default())
+        }
+    }
+
+    /// Save serve config to path. Uses advisory lock. Creates parent dirs if needed.
+    pub fn save(&self, path: &Path) -> Result<()> {
+        if let Some(p) = path.parent() {
+            fs::create_dir_all(p)?;
+        }
+        let rc = RoostRc {
+            serve: self.clone(),
+        };
+        let s = toml::to_string_pretty(&rc)?;
+        let mut file = fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(true)
+            .open(path)?;
+        let _lock = fs2::FileExt::lock_exclusive(&file)?;
+        file.write_all(s.as_bytes())?;
+        drop(_lock);
+        Ok(())
+    }
+
+    pub fn add(&mut self, domain: String, port: u16) {
+        self.mappings.retain(|m| m.domain != domain);
+        self.mappings.push(Mapping { domain, port });
+    }
+
+    pub fn remove(&mut self, domain: &str) {
+        self.mappings.retain(|m| m.domain != domain);
+    }
+
+    pub fn list(&self) -> Vec<(&str, u16)> {
+        self.mappings
+            .iter()
+            .map(|m| (m.domain.as_str(), m.port))
+            .collect()
+    }
+}
+
+/// Merge project and global configs; project overrides on conflict.
+pub fn merge_configs(project: &ServeConfig, global: &ServeConfig) -> HashMap<String, u16> {
+    let mut out = HashMap::new();
+    for m in &global.mappings {
+        out.insert(m.domain.clone(), m.port);
+    }
+    for m in &project.mappings {
+        out.insert(m.domain.clone(), m.port);
+    }
+    out
+}
+
+/// Merged mapping with source for list output.
+#[derive(Debug, Clone)]
+pub struct MergedMapping {
+    pub domain: String,
+    pub port: u16,
+    pub source: MappingSource,
+}
+
+/// Merge project and global configs; returns list with source per mapping.
+/// Project overrides global on conflict; source reflects which file provided the value.
+pub fn merge_configs_with_source(
+    project: &ServeConfig,
+    global: &ServeConfig,
+) -> Vec<MergedMapping> {
+    let mut by_domain: HashMap<String, (u16, MappingSource)> = HashMap::new();
+    for m in &global.mappings {
+        if !m.domain.is_empty() {
+            by_domain.insert(m.domain.clone(), (m.port, MappingSource::Global));
+        }
+    }
+    for m in &project.mappings {
+        if !m.domain.is_empty() {
+            by_domain.insert(m.domain.clone(), (m.port, MappingSource::Project));
+        }
+    }
+    let mut out: Vec<MergedMapping> = by_domain
+        .into_iter()
+        .map(|(domain, (port, source))| MergedMapping {
+            domain,
+            port,
+            source,
+        })
+        .collect();
+    out.sort_by(|a, b| a.domain.cmp(&b.domain));
+    out
+}

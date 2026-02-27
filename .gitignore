@@ -1,1 +1,7 @@
 /target
+/roost_test_*
+.roostrc
+
+IMPLEMENTATION.md
+PLAN.md
+PROGRESS.md

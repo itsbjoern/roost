@@ -1,0 +1,342 @@
+//! CLI definitions and command routing.
+
+use anyhow::Result;
+use clap::{Parser, Subcommand};
+use std::path::PathBuf;
+
+use crate::config::{project_roostrc, RoostPaths};
+use crate::serve::config::{MappingSource, ServeConfig};
+use crate::store;
+
+#[derive(Parser)]
+#[command(name = "roost")]
+#[command(about = "Local HTTPS reverse proxy with signed domains")]
+pub struct Cli {
+    #[command(subcommand)]
+    pub command: Commands,
+}
+
+#[derive(Subcommand)]
+pub enum Commands {
+    /// One-time setup: create default CA, install to trust store
+    Init,
+
+    /// CA management
+    Ca {
+        #[command(subcommand)]
+        cmd: CaCmd,
+    },
+
+    /// Domain management (hosts, certs implicit)
+    Domain {
+        #[command(subcommand)]
+        cmd: DomainCmd,
+    },
+
+    /// Reverse proxy server
+    Serve {
+        #[arg(long, short, default_value = "443")]
+        port: u16,
+        #[command(subcommand)]
+        cmd: Option<ServeCmd>,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum CaCmd {
+    /// List all CAs
+    List,
+    /// Create CA (default name: "default")
+    Create { name: Option<String> },
+    /// Remove CA (fails if domains use it)
+    Remove { name: String },
+    /// Install CA into system trust store
+    Install { name: Option<String> },
+    /// Remove CA from system trust store
+    Uninstall { name: Option<String> },
+}
+
+#[derive(Subcommand)]
+pub enum DomainCmd {
+    /// List domains (show CA per domain)
+    List,
+    /// Add domain, auto-create cert
+    Add {
+        domain: String,
+        #[arg(long)]
+        exact: bool,
+        #[arg(long)]
+        allow: bool,
+    },
+    /// Remove domain and cert
+    Remove { domain: String },
+    /// Re-sign domain cert with different CA
+    SetCa { domain: String, ca_name: String },
+    /// Return cert and key paths (parseable)
+    GetCert { domain: String },
+}
+
+#[derive(Subcommand)]
+pub enum ServeCmd {
+    /// Add mapping; auto-adds domain if not registered
+    Config {
+        #[command(subcommand)]
+        cmd: ServeConfigCmd,
+    },
+    /// Start proxy as background daemon
+    Daemon {
+        #[command(subcommand)]
+        cmd: ServeDaemonCmd,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum ServeConfigCmd {
+    Add { domain: String, port: u16, #[arg(long)] global: bool },
+    Remove { domain: String, #[arg(long)] global: bool },
+    List,
+}
+
+#[derive(Subcommand)]
+pub enum ServeDaemonCmd {
+    Start,
+    Stop,
+    Status,
+    Reload,
+}
+
+/// Run CLI and dispatch to handlers.
+pub fn run() -> Result<()> {
+    let cli = Cli::parse();
+    let paths = RoostPaths::default_paths();
+
+    match cli.command {
+        Commands::Init => cmd_init(&paths),
+        Commands::Ca { cmd } => cmd_ca(&paths, cmd),
+        Commands::Domain { cmd } => cmd_domain(&paths, cmd),
+        Commands::Serve { port, cmd } => cmd_serve(&paths, port, cmd),
+    }
+}
+
+fn cmd_init(paths: &RoostPaths) -> Result<()> {
+    crate::store::ensure_dirs(paths)?;
+
+    if !crate::ca::ca_exists(paths, "default") {
+        crate::ca::create_ca(paths, "default")?;
+        println!("Created CA: default");
+    }
+
+    let mut config = crate::store::load_config(paths)?;
+    if config.default_ca.is_empty() {
+        config.default_ca = "default".to_string();
+        crate::store::save_config(paths, &config)?;
+    }
+
+    let ca_path = paths.ca_dir.join("default").join("ca.pem");
+    if ca_path.is_file() && std::env::var("ROOST_SKIP_TRUST_INSTALL").is_err() {
+        if let Err(e) = crate::trust::install_ca(&ca_path) {
+            eprintln!("Warning: could not install CA to trust store: {e}");
+            eprintln!("Run 'roost ca install' manually when ready.");
+        } else {
+            println!("Installed CA to system trust store.");
+        }
+    }
+
+    println!("Roost initialized at {}", paths.config_dir.display());
+    Ok(())
+}
+
+fn cmd_ca(paths: &RoostPaths, cmd: CaCmd) -> Result<()> {
+    match cmd {
+        CaCmd::List => {
+            let cas = crate::ca::list_cas(paths)?;
+            for ca in cas {
+                println!("{ca}");
+            }
+            Ok(())
+        }
+        CaCmd::Create { name } => {
+            let n = name.as_deref().unwrap_or("default");
+            crate::ca::create_ca(paths, n)?;
+            println!("Created CA: {n}");
+            Ok(())
+        }
+        CaCmd::Remove { name } => {
+            crate::ca::remove_ca(paths, &name)?;
+            println!("Removed CA: {name}");
+            Ok(())
+        }
+        CaCmd::Install { name } => {
+            let n = name.as_deref().unwrap_or("default");
+            let ca_path = paths.ca_dir.join(n).join("ca.pem");
+            crate::trust::install_ca(&ca_path)?;
+            println!("Installed CA: {n}");
+            Ok(())
+        }
+        CaCmd::Uninstall { name } => {
+            let n = name.as_deref().unwrap_or("default");
+            let ca_path = paths.ca_dir.join(n).join("ca.pem");
+            crate::trust::uninstall_ca(&ca_path)?;
+            println!("Uninstalled CA: {n}");
+            Ok(())
+        }
+    }
+}
+
+fn cmd_domain(paths: &RoostPaths, cmd: DomainCmd) -> Result<()> {
+    match cmd {
+        DomainCmd::List => {
+            let config = store::load_config(paths)?;
+            for (domain, ca) in crate::domain::list_domains(&config) {
+                println!("{domain}\t{ca}");
+            }
+            Ok(())
+        }
+        DomainCmd::Add { domain, exact, allow } => {
+            crate::domain::validate_domain(&domain, allow)?;
+            let mut config = store::load_config(paths)?;
+            let editor = crate::platform::default_hosts_editor();
+            crate::domain::add_domain(paths, &mut config, &domain, exact, Some(editor.as_ref()))?;
+            store::save_config(paths, &config)?;
+            println!("Added domain: {domain}");
+            Ok(())
+        }
+        DomainCmd::Remove { domain } => {
+            let mut config = store::load_config(paths)?;
+            let editor = crate::platform::default_hosts_editor();
+            crate::domain::remove_domain(paths, &mut config, &domain, Some(editor.as_ref()))?;
+            store::save_config(paths, &config)?;
+            println!("Removed domain: {domain}");
+            Ok(())
+        }
+        DomainCmd::SetCa { domain, ca_name } => {
+            let mut config = store::load_config(paths)?;
+            crate::domain::set_ca(paths, &mut config, &domain, &ca_name)?;
+            store::save_config(paths, &config)?;
+            println!("Set CA for {domain}: {ca_name}");
+            Ok(())
+        }
+        DomainCmd::GetCert { domain } => {
+            let (cert_path, key_path) = crate::domain::get_cert_paths(paths, &domain);
+            println!("cert: {}", cert_path.display());
+            println!("key: {}", key_path.display());
+            Ok(())
+        }
+    }
+}
+
+/// Path to .roostrc for add/remove: project (cwd) or global.
+fn serve_config_path(paths: &RoostPaths, cwd: &std::path::Path, global: bool) -> Result<PathBuf> {
+    if global {
+        Ok(paths.roostrc_global.clone())
+    } else {
+        Ok(cwd.join(".roostrc"))
+    }
+}
+
+fn cmd_serve(paths: &RoostPaths, port: u16, cmd: Option<ServeCmd>) -> Result<()> {
+    match cmd {
+        None => {
+            let cwd = std::env::current_dir()?;
+            let project_path = project_roostrc(&cwd);
+            let project = project_path
+                .as_ref()
+                .map(|p| ServeConfig::load(p))
+                .transpose()?
+                .unwrap_or_default();
+            let global = ServeConfig::load(&paths.roostrc_global)?;
+            let mappings = crate::serve::config::merge_configs(&project, &global);
+            let rt = tokio::runtime::Runtime::new()?;
+            rt.block_on(crate::serve::proxy::run_proxy(paths, mappings, port))?;
+            Ok(())
+        }
+        Some(ServeCmd::Config { cmd }) => {
+            let cwd = std::env::current_dir()?;
+            match cmd {
+                ServeConfigCmd::Add {
+                    domain,
+                    port: p,
+                    global,
+                } => {
+                    let rc_path = serve_config_path(paths, &cwd, global)?;
+                    // Auto-add domain if not registered
+                    let mut config = store::load_config(paths)?;
+                    if !config.domains.contains_key(&domain) {
+                        crate::domain::validate_domain(&domain, false)?;
+                        let editor = crate::platform::default_hosts_editor();
+                        crate::domain::add_domain(
+                            paths,
+                            &mut config,
+                            &domain,
+                            false,
+                            Some(editor.as_ref()),
+                        )?;
+                        store::save_config(paths, &config)?;
+                    }
+                    let mut serve_cfg = ServeConfig::load(&rc_path)?;
+                    serve_cfg.add(domain.clone(), p);
+                    serve_cfg.save(&rc_path)?;
+                    if let Some(_) = crate::serve::daemon::daemon_status(paths)? {
+                        let _ = crate::serve::daemon::reload_daemon(paths);
+                    }
+                    println!("Added mapping: {domain} -> localhost:{p}");
+                    Ok(())
+                }
+                ServeConfigCmd::Remove { domain, global } => {
+                    let rc_path = serve_config_path(paths, &cwd, global)?;
+                    let mut serve_cfg = ServeConfig::load(&rc_path)?;
+                    serve_cfg.remove(&domain);
+                    serve_cfg.save(&rc_path)?;
+                    if let Some(_) = crate::serve::daemon::daemon_status(paths)? {
+                        let _ = crate::serve::daemon::reload_daemon(paths);
+                    }
+                    println!("Removed mapping: {domain}");
+                    Ok(())
+                }
+                ServeConfigCmd::List => {
+                    let project_path = project_roostrc(&cwd);
+                    let project = project_path
+                        .as_ref()
+                        .map(|p| ServeConfig::load(p))
+                        .transpose()?
+                        .unwrap_or_default();
+                    let global = ServeConfig::load(&paths.roostrc_global)?;
+                    let merged = crate::serve::config::merge_configs_with_source(&project, &global);
+                    for m in merged {
+                        let src = match m.source {
+                            MappingSource::Project => "project",
+                            MappingSource::Global => "global",
+                        };
+                        println!("{}\t{}\t({})", m.domain, m.port, src);
+                    }
+                    Ok(())
+                }
+            }
+        }
+        Some(ServeCmd::Daemon { cmd }) => match cmd {
+            ServeDaemonCmd::Start => {
+                crate::serve::daemon::start_daemon(paths, port)?;
+                Ok(())
+            }
+            ServeDaemonCmd::Stop => {
+                crate::serve::daemon::stop_daemon(paths)?;
+                Ok(())
+            }
+            ServeDaemonCmd::Status => {
+                if let Some(state) = crate::serve::daemon::daemon_status(paths)? {
+                    println!("Daemon running: pid={}, started={}", state.pid, state.started_at);
+                    if let Some(ref p) = state.project_path {
+                        println!("  project: {}", p.display());
+                    }
+                } else {
+                    println!("Daemon not running");
+                }
+                Ok(())
+            }
+            ServeDaemonCmd::Reload => {
+                crate::serve::daemon::reload_daemon(paths)?;
+                Ok(())
+            }
+        },
+    }
+}

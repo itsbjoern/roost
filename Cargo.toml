@@ -1,6 +1,32 @@
 [package]
 name = "roost"
 version = "0.1.0"
-edition = "2024"
+edition = "2021"
 
 [dependencies]
+clap = { version = "4.5", features = ["derive"] }
+rcgen = { version = "0.13", features = ["x509-parser"] }
+toml = "0.8"
+hyper = { version = "1.4", features = ["client", "server", "http1"] }
+hyper-util = { version = "0.1", features = ["client-legacy", "server", "http1", "tokio"] }
+http-body-util = "0.1"
+tokio = { version = "1", features = ["full"] }
+tokio-rustls = "0.26"
+rustls = "0.23"
+rustls-pemfile = "2"
+http = "1"
+chrono = "0.4"
+libc = "0.2"
+serde_json = "1"
+fs2 = "0.4"
+directories = "5"
+anyhow = "1"
+thiserror = "2"
+serde = { version = "1", features = ["derive"] }
+x509-parser = "0.16"
+time = "0.3"
+
+[dev-dependencies]
+tempfile = "3"
+assert_cmd = "2"
+predicates = "2"
