@@ -25,6 +25,15 @@ use crate::config::RoostPaths;
 
 const UNSUPPORTED_SNI: &[&str] = &["localhost", "127.0.0.1", "::1"];
 
+/// Normal connection teardown (client closed, navigated away, etc.) — not worth logging.
+fn is_normal_disconnect(err: &impl std::fmt::Display) -> bool {
+    let s = err.to_string().to_lowercase();
+    s.contains("connection reset")
+        || s.contains("close_notify")
+        || s.contains("broken pipe")
+        || s.contains("connection error")
+}
+
 #[derive(Clone)]
 struct CertResolver {
     certs: HashMap<String, Arc<CertifiedKey>>,
@@ -227,7 +236,9 @@ pub async fn run_proxy(
                             )
                             .await
                         {
-                            eprintln!("connection error: {e:#}");
+                            if !is_normal_disconnect(&e) {
+                                eprintln!("Connection error: {e:#}");
+                            }
                         }
                     });
                 }
@@ -357,13 +368,16 @@ async fn proxy_request(
                         if let Err(e) =
                             tokio::io::copy_bidirectional(&mut server_io, &mut client_io).await
                         {
-                            let msg = e.to_string();
-                            if !msg.contains("close_notify") && !msg.contains("connection reset") {
+                            if !is_normal_disconnect(&e) {
                                 eprintln!("WebSocket tunnel error: {e}");
                             }
                         }
                     }
-                    Err(e) => eprintln!("WebSocket upgrade failed: {e}"),
+                    Err(e) => {
+                        if !is_normal_disconnect(&e) {
+                            eprintln!("WebSocket upgrade failed: {e}");
+                        }
+                    }
                 }
             });
         }
