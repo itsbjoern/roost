@@ -2,7 +2,6 @@
 
 [![Release](https://img.shields.io/github/v/release/itsbjoern/roost?label=release)](https://github.com/itsbjoern/roost/releases)
 [![CI](https://img.shields.io/github/actions/workflow/status/itsbjoern/roost/ci.yml?branch=main&label=ci)](https://github.com/itsbjoern/roost/actions)
-[![Tests](https://img.shields.io/github/actions/workflow/status/itsbjoern/roost/ci.yml?branch=main&label=tests)](https://github.com/itsbjoern/roost/actions)
 
 A local HTTPS reverse proxy that manages certificate authorities, signed domain certificates, and hosts file entries. Use real HTTPS for local development without manual cert setup.
 

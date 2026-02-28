@@ -3,11 +3,13 @@
 use anyhow::{Context, Result};
 use std::path::Path;
 use std::process::Command;
+#[cfg(target_os = "macos")]
 use x509_parser::pem::Pem;
 
 use super::{HostsEditor, TrustStore};
 
 /// Extract Common Name from a CA PEM file (e.g. "Roost CA (default)").
+#[cfg(target_os = "macos")]
 fn cert_cn_from_pem(ca_pem_path: &Path) -> Result<Option<String>> {
     let pem_bytes = std::fs::read(ca_pem_path)
         .with_context(|| format!("read CA cert: {}", ca_pem_path.display()))?;
