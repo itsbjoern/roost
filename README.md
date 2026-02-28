@@ -80,20 +80,31 @@ When you use an explicit port in the URL (e.g. `https://api.local:5173`), the pr
 | `roost ca create <name>` | Create a new CA |
 | `roost ca install [name]` | Install CA into system trust store |
 | `roost ca uninstall [name]` | Remove CA from trust store |
-| `roost domain add <domain>` | Add domain, create cert, update hosts |
+| `roost domain add <domain>` | Add domain, create cert, update hosts. Use `--exact` for no wildcard; `--allow` to bypass TLD allowlist |
 | `roost domain list` | List registered domains |
 | `roost serve` | Start proxy (foreground) |
-| `roost serve config add <domain> <port>` | Map domain to port |
-| `roost serve config ports add <port>` | Add listen port |
+| `roost serve config add <domain> <port>` | Map domain to port. Use `--global` to write to user config instead of project |
+| `roost serve config remove <domain>` | Remove mapping. Use `--global` for user config |
+| `roost serve config list` | List mappings (shows project or global source per mapping) |
+| `roost serve config ports add/remove/set` | Manage listen ports. Use `--global` for user config |
 | `roost serve daemon start` | Run proxy in background |
 
 Run `roost --help` or `roost <cmd> --help` for full usage.
+
+### Global vs project config
+
+Domain→port mappings and listen ports live in `.roostrc` in one of two places:
+
+- **Project** (default): `.roostrc` in the current working directory. Best for per-project config you’ll commit to the repo. Use when adding mappings from within a project.
+- **Global**: `~/.roost/.roostrc` (or `%APPDATA%\roost\.roostrc` on Windows). User-wide config that applies in any directory. Use for personal defaults or domains you use across many projects.
+
+When you run `roost serve`, both configs are merged. For mappings, project overrides global when the same domain exists in both. For ports, the sets are combined. Use `roost serve config list` to see which file each mapping comes from. Add `--global` to `config add`, `config remove`, and `ports add/remove/set` to target the global file instead of the project.
 
 ## Features
 
 - **TLD allowlist**: Only `.test`, `.local`, `.dev`, etc. by default; use `--allow` to override
 - **Wildcard certs**: `domain add foo.local` covers `foo.local` and `*.foo.local`; use `--exact` to disable
-- **Config merge**: Project `.roostrc` in cwd plus global `~/.roost/.roostrc`; project overrides on conflict; ports are merged
+- **Config merge**: Project and global `.roostrc` merge when you serve; see [Global vs project config](#global-vs-project-config)
 - **Daemon**: `roost serve daemon start|stop|status|reload`; add/remove mappings triggers reload when running
 - **Auto renewal**: Certs expiring within 30 days are regenerated automatically
 
@@ -109,7 +120,7 @@ Run `roost --help` or `roost <cmd> --help` for full usage.
   daemon.json    # Daemon state when running
 ```
 
-**Project `.roostrc`** defines domain→port mappings and listen ports:
+**`.roostrc`** (project or global) defines domain→port mappings and listen ports. Project: `<cwd>/.roostrc`. Global: `~/.roost/.roostrc`.
 
 ```toml
 [serve]
