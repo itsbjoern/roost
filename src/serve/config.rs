@@ -29,11 +29,17 @@ struct RoostRc {
     serve: ServeConfig,
 }
 
+/// Default ports when none configured: 80 (HTTP redirect) and 443 (HTTPS).
+pub const DEFAULT_PORTS: [u16; 2] = [80, 443];
+
 /// Serve config (from .roostrc or global).
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ServeConfig {
     #[serde(default)]
     pub mappings: Vec<Mapping>,
+    /// Ports to listen on. Empty means use DEFAULT_PORTS ([80, 443]).
+    #[serde(default)]
+    pub ports: Vec<u16>,
 }
 
 impl ServeConfig {
@@ -86,6 +92,66 @@ impl ServeConfig {
             .iter()
             .map(|m| (m.domain.as_str(), m.port))
             .collect()
+    }
+
+    /// Effective ports: config ports if non-empty, else DEFAULT_PORTS.
+    fn effective_ports(&self) -> Vec<u16> {
+        if self.ports.is_empty() {
+            DEFAULT_PORTS.to_vec()
+        } else {
+            let mut p = self.ports.clone();
+            p.sort();
+            p.dedup();
+            p
+        }
+    }
+
+    pub fn ports_add(&mut self, port: u16) {
+        let mut effective = self.effective_ports();
+        if !effective.contains(&port) {
+            effective.push(port);
+            effective.sort();
+            self.ports = effective;
+        }
+    }
+
+    pub fn ports_remove(&mut self, port: u16) {
+        if self.ports.is_empty() {
+            self.ports = DEFAULT_PORTS
+                .iter()
+                .filter(|&&p| p != port)
+                .copied()
+                .collect();
+        } else {
+            self.ports.retain(|&p| p != port);
+        }
+    }
+
+    /// Replace ports list entirely (for scripting / tests).
+    pub fn ports_set(&mut self, ports: Vec<u16>) {
+        let mut p = ports;
+        p.sort();
+        p.dedup();
+        self.ports = p;
+    }
+
+    pub fn ports_list(&self) -> Vec<u16> {
+        self.effective_ports()
+    }
+}
+
+/// Merge ports from project and global configs (union). Uses DEFAULT_PORTS when both empty.
+pub fn merge_ports(project: &ServeConfig, global: &ServeConfig) -> Vec<u16> {
+    use std::collections::HashSet;
+    let project_eff = project.effective_ports();
+    let global_eff = global.effective_ports();
+    let p: HashSet<u16> = project_eff.into_iter().chain(global_eff).collect();
+    if p.is_empty() {
+        DEFAULT_PORTS.to_vec()
+    } else {
+        let mut v: Vec<u16> = p.into_iter().collect();
+        v.sort();
+        v
     }
 }
 

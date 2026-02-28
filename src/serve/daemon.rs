@@ -61,7 +61,8 @@ fn clear_state(paths: &RoostPaths) -> Result<()> {
 }
 
 /// Start daemon: spawn proxy in background, write daemon.json.
-pub fn start_daemon(paths: &RoostPaths, port: u16) -> Result<()> {
+/// Ports are read from config (project + global .roostrc) when serve starts.
+pub fn start_daemon(paths: &RoostPaths) -> Result<()> {
     if let Some(state) = read_state(paths)? {
         if is_pid_alive(state.pid) {
             anyhow::bail!(
@@ -77,7 +78,7 @@ pub fn start_daemon(paths: &RoostPaths, port: u16) -> Result<()> {
 
     let exe = std::env::current_exe().context("current exe")?;
     let mut cmd = Command::new(&exe);
-    cmd.args(["serve", "--port", &port.to_string()])
+    cmd.args(["serve"])
         .current_dir(&cwd)
         .stdout(Stdio::null())
         .stderr(Stdio::null())

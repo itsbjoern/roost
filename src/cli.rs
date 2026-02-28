@@ -35,9 +35,6 @@ pub enum Commands {
 
     /// Run the HTTPS reverse proxy (or manage config/daemon)
     Serve {
-        /// HTTPS port to listen on
-        #[arg(long, short, default_value = "443")]
-        port: u16,
         #[command(subcommand)]
         cmd: Option<ServeCmd>,
     },
@@ -124,6 +121,39 @@ pub enum ServeConfigCmd {
     },
     /// List all domain -> port mappings (project + global)
     List,
+    /// Manage listen ports (add, remove, list); default is 80 and 443
+    Ports {
+        #[command(subcommand)]
+        cmd: ServePortsCmd,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum ServePortsCmd {
+    /// Add a port to listen on
+    Add {
+        port: u16,
+        /// Write to global .roostrc instead of project .roostrc
+        #[arg(long)]
+        global: bool,
+    },
+    /// Remove a port
+    Remove {
+        port: u16,
+        /// Remove from global .roostrc instead of project
+        #[arg(long)]
+        global: bool,
+    },
+    /// Replace ports list entirely (e.g. for scripting)
+    Set {
+        #[arg(num_args = 1..)]
+        ports: Vec<u16>,
+        /// Write to global .roostrc instead of project .roostrc
+        #[arg(long)]
+        global: bool,
+    },
+    /// List configured listen ports
+    List,
 }
 
 #[derive(Subcommand)]
@@ -147,7 +177,7 @@ pub fn run() -> Result<()> {
         Commands::Init => cmd_init(&paths),
         Commands::Ca { cmd } => cmd_ca(&paths, cmd),
         Commands::Domain { cmd } => cmd_domain(&paths, cmd),
-        Commands::Serve { port, cmd } => cmd_serve(&paths, port, cmd),
+        Commands::Serve { cmd } => cmd_serve(&paths, cmd),
     }
 }
 
@@ -274,7 +304,7 @@ fn serve_config_path(paths: &RoostPaths, cwd: &std::path::Path, global: bool) ->
     }
 }
 
-fn cmd_serve(paths: &RoostPaths, port: u16, cmd: Option<ServeCmd>) -> Result<()> {
+fn cmd_serve(paths: &RoostPaths, cmd: Option<ServeCmd>) -> Result<()> {
     match cmd {
         None => {
             let cwd = std::env::current_dir()?;
@@ -286,8 +316,9 @@ fn cmd_serve(paths: &RoostPaths, port: u16, cmd: Option<ServeCmd>) -> Result<()>
                 .unwrap_or_default();
             let global = ServeConfig::load(&paths.roostrc_global)?;
             let mappings = crate::serve::config::merge_configs(&project, &global);
+            let ports = crate::serve::config::merge_ports(&project, &global);
             let rt = tokio::runtime::Runtime::new()?;
-            rt.block_on(crate::serve::proxy::run_proxy(paths, mappings, port))?;
+            rt.block_on(crate::serve::proxy::run_proxy(paths, mappings, ports))?;
             Ok(())
         }
         Some(ServeCmd::Config { cmd }) => {
@@ -351,11 +382,60 @@ fn cmd_serve(paths: &RoostPaths, port: u16, cmd: Option<ServeCmd>) -> Result<()>
                     }
                     Ok(())
                 }
+                ServeConfigCmd::Ports { cmd } => match cmd {
+                    ServePortsCmd::Add { port, global } => {
+                        let rc_path = serve_config_path(paths, &cwd, global)?;
+                        let mut serve_cfg = ServeConfig::load(&rc_path)?;
+                        serve_cfg.ports_add(port);
+                        serve_cfg.save(&rc_path)?;
+                        if crate::serve::daemon::daemon_status(paths)?.is_some() {
+                            let _ = crate::serve::daemon::reload_daemon(paths);
+                        }
+                        println!("Added port {port}");
+                        Ok(())
+                    }
+                    ServePortsCmd::Remove { port, global } => {
+                        let rc_path = serve_config_path(paths, &cwd, global)?;
+                        let mut serve_cfg = ServeConfig::load(&rc_path)?;
+                        serve_cfg.ports_remove(port);
+                        serve_cfg.save(&rc_path)?;
+                        if crate::serve::daemon::daemon_status(paths)?.is_some() {
+                            let _ = crate::serve::daemon::reload_daemon(paths);
+                        }
+                        println!("Removed port {port}");
+                        Ok(())
+                    }
+                    ServePortsCmd::Set { ports, global } => {
+                        let rc_path = serve_config_path(paths, &cwd, global)?;
+                        let mut serve_cfg = ServeConfig::load(&rc_path)?;
+                        serve_cfg.ports_set(ports);
+                        serve_cfg.save(&rc_path)?;
+                        if crate::serve::daemon::daemon_status(paths)?.is_some() {
+                            let _ = crate::serve::daemon::reload_daemon(paths);
+                        }
+                        println!("Ports updated");
+                        Ok(())
+                    }
+                    ServePortsCmd::List => {
+                        let project_path = project_roostrc(&cwd);
+                        let project = project_path
+                            .as_ref()
+                            .map(|p| ServeConfig::load(p))
+                            .transpose()?
+                            .unwrap_or_default();
+                        let global = ServeConfig::load(&paths.roostrc_global)?;
+                        let ports = crate::serve::config::merge_ports(&project, &global);
+                        for p in ports {
+                            println!("{p}");
+                        }
+                        Ok(())
+                    }
+                },
             }
         }
         Some(ServeCmd::Daemon { cmd }) => match cmd {
             ServeDaemonCmd::Start => {
-                crate::serve::daemon::start_daemon(paths, port)?;
+                crate::serve::daemon::start_daemon(paths)?;
                 Ok(())
             }
             ServeDaemonCmd::Stop => {

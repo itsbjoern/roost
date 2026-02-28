@@ -41,13 +41,21 @@ fn e2e_serve_flow() {
             .assert()
             .success();
 
+        // Use non-privileged port for test (80/443 need root)
+        Command::cargo_bin("roost")
+            .unwrap()
+            .current_dir(project_dir)
+            .args(["serve", "config", "ports", "set", &port.to_string()])
+            .assert()
+            .success();
+
         // Start proxy in background (mock backend would need separate process;
         // we verify proxy starts and responds for unknown Host)
         let roost_exe = std::path::PathBuf::from(
             Command::cargo_bin("roost").unwrap().get_program(),
         );
         let mut proxy_child: Child = std::process::Command::new(&roost_exe)
-            .args(["serve", "--port", &port.to_string()])
+            .args(["serve"])
             .current_dir(project_dir)
             .env("ROOST_HOME", project_dir)
             .env("ROOST_SKIP_TRUST_INSTALL", "1")

@@ -76,11 +76,13 @@ pub fn add_domain(
     }
 
     cert::ensure_cert_valid(paths, domain, &ca_name, exact)?;
-    config.domains.insert(domain.to_string(), ca_name);
 
+    // Update hosts before config so we don't leave partial state on failure
     if let Some(editor) = hosts_editor {
         hosts::add_domain_to_hosts(editor, domain)?;
     }
+
+    config.domains.insert(domain.to_string(), ca_name);
 
     Ok(())
 }

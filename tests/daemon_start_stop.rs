@@ -33,11 +33,19 @@ fn daemon_start_stop() {
             .assert()
             .success();
 
-        // Start daemon (uses port 18443 to avoid collisions)
+        // Use non-privileged port (80/443 need root)
         Command::cargo_bin("roost")
             .unwrap()
             .current_dir(project_dir)
-            .args(["serve", "--port", "18443", "daemon", "start"])
+            .args(["serve", "config", "ports", "set", "18443"])
+            .assert()
+            .success();
+
+        // Start daemon
+        Command::cargo_bin("roost")
+            .unwrap()
+            .current_dir(project_dir)
+            .args(["serve", "daemon", "start"])
             .assert()
             .success();
 

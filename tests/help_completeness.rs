@@ -102,6 +102,31 @@ fn help_serve_config_list() {
 }
 
 #[test]
+fn help_serve_config_ports() {
+    roost().args(["serve", "config", "ports", "--help"]).assert().success();
+}
+
+#[test]
+fn help_serve_config_ports_add() {
+    roost().args(["serve", "config", "ports", "add", "--help"]).assert().success();
+}
+
+#[test]
+fn help_serve_config_ports_remove() {
+    roost().args(["serve", "config", "ports", "remove", "--help"]).assert().success();
+}
+
+#[test]
+fn help_serve_config_ports_set() {
+    roost().args(["serve", "config", "ports", "set", "--help"]).assert().success();
+}
+
+#[test]
+fn help_serve_config_ports_list() {
+    roost().args(["serve", "config", "ports", "list", "--help"]).assert().success();
+}
+
+#[test]
 fn help_serve_daemon() {
     roost().args(["serve", "daemon", "--help"]).assert().success();
 }

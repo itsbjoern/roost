@@ -92,7 +92,7 @@ impl HostsEditor for UnixHostsEditor {
         #[cfg(target_os = "macos")]
         {
             // Pass path via env var so we never embed it in a shell string (avoids escaping issues)
-            Command::new("osascript")
+            let status = Command::new("osascript")
                 .env("ROOST_HOSTS_TMP", temp.as_os_str())
                 .args([
                     "-e",
@@ -100,6 +100,11 @@ impl HostsEditor for UnixHostsEditor {
                 ])
                 .status()
                 .context("osascript write hosts")?;
+            if !status.success() {
+                anyhow::bail!(
+                    "Failed to update hosts file (user cancelled or permission denied)"
+                );
+            }
         }
 
         #[cfg(not(target_os = "macos"))]

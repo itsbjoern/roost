@@ -6,7 +6,7 @@ A local HTTPS reverse proxy that manages certificate authorities, signed domain 
 
 - **CA management**: Create and install a root CA into your system trust store so browsers accept local certs
 - **Domain management**: Add domains (e.g. `api.example.local`); Roost creates certs, updates `/etc/hosts`, and handles renewal
-- **Reverse proxy**: Terminates TLS and forwards `https://api.example.local` to `http://127.0.0.1:5001`
+- **Reverse proxy**: Terminates TLS and forwards `https://api.example.local` to `http://localhost:5001`; explicit ports in the URL (e.g. `https://api.example.local:5173`) forward to that backend port
 - **Daemon mode**: Run the proxy in the background; reload config without restarting
 
 ## Requirements
@@ -32,10 +32,35 @@ roost domain add api.example.local
 
 # Map it to your app and start the proxy
 roost serve config add api.example.local 5001
-roost serve --port 8443
+roost serve
 ```
 
-Visit `https://api.example.local:8443` (or use port 443 with elevated privileges).
+By default the proxy listens on **80** and **443**. Port 80 redirects to HTTPS. Visit `https://api.example.local` (or `http://api.example.local` to be redirected).
+
+For development without elevated privileges, add a non-privileged port:
+
+```bash
+roost serve config ports add 8443
+roost serve
+```
+
+Visit `https://api.example.local:8443`.
+
+## Port configuration
+
+Ports are configured in `.roostrc` and default to **80** and **443**:
+
+- **Port 80** (when 443 is also configured): Plain HTTP redirect to HTTPS
+- **Port 443** and other ports: TLS proxy to your backends
+
+```bash
+roost serve config ports add 5173    # Add Vite, etc.
+roost serve config ports remove 80   # HTTPS only
+roost serve config ports set 8443    # Replace list (e.g. for scripting)
+roost serve config ports list        # Show configured ports
+```
+
+When you visit a URL with an explicit port (e.g. `https://api.example.local:5173`), the proxy forwards to that backend port directly instead of using the domain mapping.
 
 ## Permissions
 
@@ -43,15 +68,15 @@ Visit `https://api.example.local:8443` (or use port 443 with elevated privileges
 |--------|----------|
 | CA install / uninstall | Admin (macOS: osascript; Linux: sudo) |
 | Hosts file edit | Admin (same escalation) |
-| Port 443 | Root or `CAP_NET_BIND_SERVICE` |
-| Port 8443+ | None (use `--port 8443`) |
+| Port 80 / 443 | Root or `CAP_NET_BIND_SERVICE` |
+| Port 8443+ | None (add with `ports add 8443`) |
 
 ## Features
 
 - **TLD allowlist**: Only `.test`, `.local`, `.dev`, etc. by default; use `--allow` to override
 - **Wildcard certs**: `domain add foo.local` covers `foo.local` and `*.foo.local`; use `--exact` to disable
-- **Config merge**: Project `.roostrc` in cwd plus global `~/.roost/.roostrc`; project overrides on conflict
-- **Daemon**: `roost serve daemon start|stop|status|reload`; config add/remove triggers reload when running
+- **Config merge**: Project `.roostrc` in cwd plus global `~/.roost/.roostrc`; project overrides on conflict; ports are merged (union)
+- **Daemon**: `roost serve daemon start|stop|status|reload`; ports and mappings from config; add/remove triggers reload when running
 - **Auto renewal**: Certs expiring within 30 days are regenerated automatically
 - **Parseable output**: `roost domain get-path cert <domain>` and `get-path key <domain>` print single paths for scripting
 
@@ -73,15 +98,25 @@ Visit `https://api.example.local:8443` (or use port 443 with elevated privileges
   daemon.json    # Daemon state when running
 ```
 
-Project `.roostrc` defines serve mappings; global `~/.roost/.roostrc` holds shared mappings.
+Project `.roostrc` defines serve mappings and ports; global `~/.roost/.roostrc` holds shared config.
+
+```toml
+[serve]
+[[serve.mappings]]
+domain = "api.example.local"
+port = 5001
+
+ports = [80, 443]   # optional; defaults to [80, 443]
+```
 
 ## Commands
 
 - `roost init` – One-time setup
 - `roost ca list|create|remove|install|uninstall` – CA management
 - `roost domain list|add|remove|set-ca|get-path` – Domain management
-- `roost serve [--port N]` – Start proxy (foreground)
-- `roost serve config add|remove|list` – Mappings
+- `roost serve` – Start proxy (foreground; ports from config)
+- `roost serve config add|remove|list` – Domain → port mappings
+- `roost serve config ports add|remove|set|list` – Listen ports (default: 80, 443)
 - `roost serve daemon start|stop|status|reload` – Daemon control
 
 Run `roost --help` or `roost <cmd> --help` for full usage.
