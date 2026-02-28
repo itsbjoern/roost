@@ -44,8 +44,8 @@ pub enum Commands {
 pub enum CaCmd {
     /// List all certificate authority names
     List,
-    /// Create a new CA (used to sign domain certs); defaults to "default"
-    Create { name: Option<String> },
+    /// Create a new CA (used to sign domain certs)
+    Create { name: String },
     /// Remove a CA; fails if any domain still uses it
     Remove { name: String },
     /// Install CA into system trust store (macOS keychain, Linux ca-certificates)
@@ -222,9 +222,8 @@ fn cmd_ca(paths: &RoostPaths, cmd: CaCmd) -> Result<()> {
             Ok(())
         }
         CaCmd::Create { name } => {
-            let n = name.as_deref().unwrap_or("default");
-            crate::ca::create_ca(paths, n)?;
-            println!("Created CA: {n}");
+            crate::ca::create_ca(paths, &name)?;
+            println!("Created CA: {name}");
             Ok(())
         }
         CaCmd::Remove { name } => {
