@@ -40,6 +40,53 @@ roost serve
 # Visit https://api.local:8443
 ```
 
+### Use certs directly in a local server (no proxy)
+
+You can add a domain and use its certs in your own dev server—no proxy needed. Roost creates the cert, updates hosts, and you get the paths:
+
+```bash
+roost domain add api.local
+# Get paths for your server config:
+roost domain get-path cert api.local   # → ~/.roost/certs/api.local.pem
+roost domain get-path key api.local    # → ~/.roost/certs/api.local-key.pem
+```
+
+Point your local server at those paths. Example with Vite:
+
+```ts
+// vite.config.ts
+import { defineConfig } from 'vite';
+import { execSync } from 'child_process';
+import fs from 'fs';
+
+const certPath = execSync('roost domain get-path cert api.local').toString().trim();
+const keyPath = execSync('roost domain get-path key api.local').toString().trim();
+
+export default defineConfig({
+  server: {
+    https: {
+      cert: fs.readFileSync(certPath),
+      key: fs.readFileSync(keyPath),
+    },
+  },
+});
+```
+
+Or with Node's `https.createServer`:
+
+```js
+const https = require('https');
+const { execSync } = require('child_process');
+const fs = require('fs');
+
+const cert = fs.readFileSync(execSync('roost domain get-path cert api.local').toString().trim());
+const key = fs.readFileSync(execSync('roost domain get-path key api.local').toString().trim());
+const server = https.createServer({ cert, key }, (req, res) => { /* ... */ });
+server.listen(5173);
+```
+
+Your dev server then serves HTTPS directly at `https://api.local:5173` using Roost's trusted certs.
+
 ## What it does
 
 - **CA management**: Create and install a root CA into your system trust store so browsers accept local certs
@@ -82,6 +129,7 @@ When you use an explicit port in the URL (e.g. `https://api.local:5173`), the pr
 | `roost ca uninstall [name]` | Remove CA from trust store |
 | `roost domain add <domain>` | Add domain, create cert, update hosts. Use `--exact` for no wildcard; `--allow` to bypass TLD allowlist |
 | `roost domain list` | List registered domains |
+| `roost domain get-path cert <domain>`, `key <domain>` | Print path to cert or key file (for scripting, e.g. with local HTTPS servers) |
 | `roost serve` | Start proxy (foreground) |
 | `roost serve config add <domain> <port>` | Map domain to port. Use `--global` to write to user config instead of project |
 | `roost serve config remove <domain>` | Remove mapping. Use `--global` for user config |
