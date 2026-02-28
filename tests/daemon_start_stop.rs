@@ -5,7 +5,9 @@ mod common;
 use assert_cmd::Command;
 use predicates::prelude::*;
 
+/// Daemon start/stop is Unix-only; stop/reload use SIGTERM/SIGHUP.
 #[test]
+#[cfg(unix)]
 fn daemon_start_stop() {
     let dir = common::temp_roost_home();
     let hosts_path = dir.path().join("hosts");

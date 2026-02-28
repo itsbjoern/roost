@@ -4,7 +4,9 @@ mod common;
 
 use assert_cmd::Command;
 
+/// Daemon reload is Unix-only (uses SIGHUP).
 #[test]
+#[cfg(unix)]
 fn reload_when_not_running_fails_gracefully() {
     let dir = common::temp_roost_home();
     common::with_test_env(dir.path(), || {
