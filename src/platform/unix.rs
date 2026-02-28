@@ -3,8 +3,52 @@
 use anyhow::{Context, Result};
 use std::path::Path;
 use std::process::Command;
+use x509_parser::pem::Pem;
 
 use super::{HostsEditor, TrustStore};
+
+/// Extract Common Name from a CA PEM file (e.g. "Roost CA (default)").
+fn cert_cn_from_pem(ca_pem_path: &Path) -> Result<Option<String>> {
+    let pem_bytes = std::fs::read(ca_pem_path)
+        .with_context(|| format!("read CA cert: {}", ca_pem_path.display()))?;
+    let pem = Pem::iter_from_buffer(&pem_bytes)
+        .next()
+        .ok_or_else(|| anyhow::anyhow!("no PEM block in certificate"))??;
+    let x509 = pem
+        .parse_x509()
+        .context("parse X.509 certificate")?;
+    let cn = x509
+        .subject()
+        .iter_common_name()
+        .next()
+        .and_then(|c| c.as_str().ok())
+        .map(String::from);
+    Ok(cn)
+}
+
+/// Sanitize CA name for use in Linux trust store filename.
+#[cfg(not(target_os = "macos"))]
+fn sanitize_ca_name(name: &str) -> String {
+    name.chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect()
+}
+
+/// Get CA name from path (e.g. .../cas/default/ca.pem -> "default").
+#[cfg(not(target_os = "macos"))]
+fn ca_name_from_path(ca_pem_path: &Path) -> Option<String> {
+    ca_pem_path
+        .parent()
+        .and_then(|p| p.file_name())
+        .and_then(|n| n.to_str())
+        .map(String::from)
+}
 
 pub struct UnixTrustStore;
 
@@ -35,11 +79,12 @@ impl TrustStore for UnixTrustStore {
 
         #[cfg(not(target_os = "macos"))]
         {
-            // Linux: copy to /usr/local/share/ca-certificates/ and run update-ca-certificates
-            // Uses sudo (standard on Linux) rather than pkexec (requires polkit, not on all distros)
-            let dest = "/usr/local/share/ca-certificates/roost-ca.crt";
+            // Linux: copy to /usr/local/share/ca-certificates/ with per-CA filename
+            let name = ca_name_from_path(ca_pem_path).unwrap_or_else(|| "default".into());
+            let safe = sanitize_ca_name(&name);
+            let dest = format!("/usr/local/share/ca-certificates/roost-{safe}.crt");
             let cp_status = Command::new("sudo")
-                .args(["cp", ca_pem_path.to_str().unwrap_or(""), dest])
+                .args(["cp", ca_pem_path.to_str().unwrap_or(""), &dest])
                 .status()
                 .context("sudo cp ca")?;
             if !cp_status.success() {
@@ -53,23 +98,67 @@ impl TrustStore for UnixTrustStore {
         Ok(())
     }
 
-    fn uninstall_ca(&self, _ca_pem_path: &Path) -> Result<()> {
+    fn uninstall_ca(&self, ca_pem_path: &Path) -> Result<()> {
         #[cfg(target_os = "macos")]
         {
-            // Would need to find cert by subject and remove - simplified for now
-            // security delete-certificate -c "Roost" /Library/Keychains/System.keychain
-            // For now we leave uninstall as no-op; full impl would parse cert and delete by identity
+            let cn = cert_cn_from_pem(ca_pem_path)?
+                .ok_or_else(|| anyhow::anyhow!("CA certificate has no Common Name"))?;
+            let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".into());
+            let keychain = format!("{home}/Library/Keychains/login.keychain-db");
+            let status = Command::new("security")
+                .args(["delete-certificate", "-c", &cn, "-t"])
+                .arg(&keychain)
+                .status()
+                .context("security delete-certificate")?;
+            if !status.success() {
+                anyhow::bail!("security delete-certificate failed (cert may not be installed)");
+            }
         }
+
         #[cfg(not(target_os = "macos"))]
         {
-            let _ = Command::new("sudo")
-                .args(["rm", "-f", "/usr/local/share/ca-certificates/roost-ca.crt"])
-                .status();
-            let _ = Command::new("sudo")
+            let name = ca_name_from_path(ca_pem_path).unwrap_or_else(|| "default".into());
+            let safe = sanitize_ca_name(&name);
+            let dest = format!("/usr/local/share/ca-certificates/roost-{safe}.crt");
+            let rm_status = Command::new("sudo")
+                .args(["rm", "-f", &dest])
+                .status()
+                .context("sudo rm ca")?;
+            if !rm_status.success() {
+                anyhow::bail!("Failed to remove CA from trust store");
+            }
+            Command::new("sudo")
                 .args(["update-ca-certificates"])
-                .status();
+                .status()
+                .context("sudo update-ca-certificates")?;
         }
         Ok(())
+    }
+
+    fn is_ca_installed(&self, ca_pem_path: &Path) -> Result<bool> {
+        #[cfg(target_os = "macos")]
+        {
+            let cn = match cert_cn_from_pem(ca_pem_path)? {
+                Some(c) => c,
+                None => return Ok(false),
+            };
+            let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".into());
+            let keychain = format!("{home}/Library/Keychains/login.keychain-db");
+            let output = Command::new("security")
+                .args(["find-certificate", "-c", &cn, "-a"])
+                .arg(&keychain)
+                .output()
+                .context("security find-certificate")?;
+            Ok(output.status.success() && !output.stdout.is_empty())
+        }
+
+        #[cfg(not(target_os = "macos"))]
+        {
+            let name = ca_name_from_path(ca_pem_path).unwrap_or_else(|| "default".into());
+            let safe = sanitize_ca_name(&name);
+            let dest = format!("/usr/local/share/ca-certificates/roost-{safe}.crt");
+            Ok(std::path::Path::new(&dest).exists())
+        }
     }
 }
 

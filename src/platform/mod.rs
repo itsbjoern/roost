@@ -17,6 +17,8 @@ pub trait TrustStore: Send + Sync {
     fn install_ca(&self, ca_pem_path: &Path) -> Result<()>;
     /// Remove CA from system trust store (by cert subject/hash).
     fn uninstall_ca(&self, ca_pem_path: &Path) -> Result<()>;
+    /// Check if CA is installed in system trust store.
+    fn is_ca_installed(&self, ca_pem_path: &Path) -> Result<bool>;
 }
 
 /// Trait for hosts file operations.

@@ -45,6 +45,14 @@ impl TrustStore for MockTrustStore {
             .push(ca_pem_path.to_string_lossy().to_string());
         Ok(())
     }
+
+    fn is_ca_installed(&self, ca_pem_path: &Path) -> anyhow::Result<bool> {
+        let path_str = ca_pem_path.to_string_lossy().to_string();
+        let installed = self.installed.lock().unwrap();
+        let uninstalled = self.uninstalled.lock().unwrap();
+        Ok(installed.iter().any(|p| p == &path_str)
+            && !uninstalled.iter().any(|p| p == &path_str))
+    }
 }
 
 #[test]

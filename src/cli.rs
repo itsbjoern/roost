@@ -213,8 +213,11 @@ fn cmd_ca(paths: &RoostPaths, cmd: CaCmd) -> Result<()> {
     match cmd {
         CaCmd::List => {
             let cas = crate::ca::list_cas(paths)?;
-            for ca in cas {
-                println!("{ca}");
+            for ca in &cas {
+                let ca_path = paths.ca_dir.join(ca).join("ca.pem");
+                let installed = crate::trust::is_ca_installed(&ca_path).unwrap_or(false);
+                let status = if installed { " (installed)" } else { "" };
+                println!("{ca}{status}");
             }
             Ok(())
         }

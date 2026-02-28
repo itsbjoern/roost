@@ -24,3 +24,8 @@ pub fn uninstall_ca(ca_pem_path: &Path) -> Result<()> {
 pub fn uninstall_ca_with_store(store: &dyn TrustStore, ca_pem_path: &Path) -> Result<()> {
     store.uninstall_ca(ca_pem_path)
 }
+
+/// Check if CA is installed in system trust store.
+pub fn is_ca_installed(ca_pem_path: &Path) -> Result<bool> {
+    default_trust_store().is_ca_installed(ca_pem_path)
+}
