@@ -16,125 +16,46 @@ use rustls::server::{ClientHello, ResolvesServerCert, ServerConfig};
 use rustls::sign::CertifiedKey;
 use std::collections::HashMap;
 use std::fmt;
-use std::io;
 use std::net::SocketAddr;
-use std::pin::Pin;
 use std::sync::Arc;
-use std::task::{Context as TaskContext, Poll};
-use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 use tokio::net::TcpListener;
 use tokio_rustls::TlsAcceptor;
 
 use crate::config::RoostPaths;
 
-/// TLS handshake record type (first byte of a TLS client hello).
-const TLS_HANDSHAKE_RECORD: u8 = 0x16;
-
-/// Wraps a stream and prepends a byte that was already read (for protocol detection).
-struct PrependByte<R> {
-    first: Option<u8>,
-    inner: R,
-}
-
-impl<R> AsyncRead for PrependByte<R>
-where
-    R: AsyncRead + Unpin,
-{
-    fn poll_read(
-        mut self: Pin<&mut Self>,
-        cx: &mut TaskContext<'_>,
-        buf: &mut ReadBuf<'_>,
-    ) -> Poll<io::Result<()>> {
-        if let Some(b) = self.first.take() {
-            if buf.remaining() > 0 {
-                buf.put_slice(&[b]);
-                return Poll::Ready(Ok(()));
-            }
-        }
-        Pin::new(&mut self.inner).poll_read(cx, buf)
-    }
-}
-
-impl<R> AsyncWrite for PrependByte<R>
-where
-    R: AsyncWrite + Unpin,
-{
-    fn poll_write(
-        mut self: Pin<&mut Self>,
-        cx: &mut TaskContext<'_>,
-        buf: &[u8],
-    ) -> Poll<io::Result<usize>> {
-        Pin::new(&mut self.inner).poll_write(cx, buf)
-    }
-
-    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut TaskContext<'_>) -> Poll<io::Result<()>> {
-        Pin::new(&mut self.inner).poll_flush(cx)
-    }
-
-    fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut TaskContext<'_>) -> Poll<io::Result<()>> {
-        Pin::new(&mut self.inner).poll_shutdown(cx)
-    }
-}
-
-/// SNI names we cannot serve - no matching cert for localhost.
 const UNSUPPORTED_SNI: &[&str] = &["localhost", "127.0.0.1", "::1"];
 
-/// Custom cert resolver:
-/// - Case-insensitive SNI matching (DNS allows it; some clients vary)
-/// - SNI "host:port" → try host part (non-standard but some clients send it)
-/// - localhost / 127.0.0.1 / ::1 / no SNI → return None (no matching cert)
 #[derive(Clone)]
-struct CertResolverWithFallback {
-    /// domain (lowercase) -> cert
+struct CertResolver {
     certs: HashMap<String, Arc<CertifiedKey>>,
 }
 
-impl fmt::Debug for CertResolverWithFallback {
+impl fmt::Debug for CertResolver {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("CertResolverWithFallback")
+        f.debug_struct("CertResolver")
             .field("domains", &self.certs.keys().collect::<Vec<_>>())
             .finish()
     }
 }
 
-impl ResolvesServerCert for CertResolverWithFallback {
+impl ResolvesServerCert for CertResolver {
     fn resolve(&self, client_hello: ClientHello<'_>) -> Option<Arc<CertifiedKey>> {
         let sni = client_hello.server_name()?;
-        let s = sni.trim();
-        if s.is_empty() {
+        let key = sni.trim().to_lowercase();
+        if key.is_empty() || UNSUPPORTED_SNI.contains(&key.as_str()) {
             return None;
         }
-        let key = s.to_lowercase();
-        if UNSUPPORTED_SNI.contains(&key.as_str()) {
-            return None;
-        }
-
-        let candidates: Vec<&str> = if s.contains(':') {
-            vec![s, s.split(':').next().unwrap_or(s).trim()]
-        } else {
-            vec![s]
-        };
-
-        for name in candidates {
-            if name.is_empty() {
-                continue;
-            }
-            if let Some(cert) = self.certs.get(&name.to_lowercase()) {
-                return Some(Arc::clone(cert));
-            }
-        }
-
-        None
+        // SNI sometimes includes port (e.g. "host:443"); use host part for lookup
+        let host = key.split(':').next().unwrap_or(&key).trim();
+        self.certs.get(host).cloned()
     }
 }
 
-/// Build cert resolver from mappings with fallbacks for WebSocket/dev server connections.
 fn build_cert_resolver(
     paths: &RoostPaths,
     mappings: &HashMap<String, u16>,
-) -> Result<Arc<CertResolverWithFallback>> {
+) -> Result<Arc<CertResolver>> {
     let provider = rustls::ServerConfig::builder().crypto_provider().clone();
-
     let mut certs: HashMap<String, Arc<CertifiedKey>> = HashMap::new();
 
     let mut domains: Vec<_> = mappings.keys().collect();
@@ -173,10 +94,9 @@ fn build_cert_resolver(
         );
     }
 
-    Ok(Arc::new(CertResolverWithFallback { certs }))
+    Ok(Arc::new(CertResolver { certs }))
 }
 
-/// HTTP redirect handler for port 80: redirect to https://host/
 async fn redirect_http_to_https(
     req: Request<Incoming>,
 ) -> Result<Response<Full<Bytes>>, anyhow::Error> {
@@ -201,8 +121,6 @@ async fn redirect_http_to_https(
         .unwrap())
 }
 
-/// Start proxy server. Listens on all given ports. Port 80 (if present) redirects to HTTPS.
-/// Other ports serve TLS and proxy to backends.
 pub async fn run_proxy(
     paths: &RoostPaths,
     mappings: HashMap<String, u16>,
@@ -225,7 +143,6 @@ pub async fn run_proxy(
         .pool_max_idle_per_host(4)
         .build(HttpConnector::new());
     let mappings = Arc::new(mappings);
-
     let has_443 = ports.contains(&443);
 
     for port in &ports {
@@ -258,10 +175,10 @@ pub async fn run_proxy(
             let tls_acceptor = tls_acceptor.clone();
             let http_client = http_client.clone();
             let listener = TcpListener::bind(SocketAddr::from(([0, 0, 0, 0], port))).await?;
-            eprintln!("Proxy listening on https://0.0.0.0:{} (TLS + plain HTTP for ws://)", port);
+            eprintln!("Proxy listening on https://0.0.0.0:{}", port);
             tokio::spawn(async move {
                 loop {
-                    let (mut tcp_stream, remote_addr) = match listener.accept().await {
+                    let (tcp_stream, remote_addr) = match listener.accept().await {
                         Ok(s) => s,
                         Err(e) => {
                             eprintln!("accept error on {port}: {e}");
@@ -272,31 +189,23 @@ pub async fn run_proxy(
                     let mappings = mappings.clone();
                     let client = http_client.clone();
                     tokio::spawn(async move {
-                        let mut first_byte = [0u8];
-                        if tokio::io::AsyncReadExt::read_exact(&mut tcp_stream, &mut first_byte)
-                            .await
-                            .is_err()
-                        {
-                            return;
-                        }
-                        let first = first_byte[0];
-                        let prepend = PrependByte {
-                            first: Some(first),
-                            inner: tcp_stream,
+                        let tls_stream = match tls_acceptor.accept(tcp_stream).await {
+                            Ok(s) => s,
+                            Err(e) => {
+                                eprintln!("TLS handshake failed: {e}");
+                                return;
+                            }
                         };
-
-                        let service = |is_tls: bool| {
+                        let service = service_fn({
                             let mappings = mappings.clone();
                             let client = client.clone();
                             let remote_addr = remote_addr;
-                            service_fn(move |req: Request<Incoming>| {
+                            move |req: Request<Incoming>| {
                                 let mappings = mappings.clone();
                                 let client = client.clone();
                                 let remote_addr = remote_addr;
-                                let is_tls = is_tls;
                                 async move {
-                                    match proxy_request(req, remote_addr, &mappings, &client, is_tls).await
-                                    {
+                                    match proxy_request(req, remote_addr, &mappings, &client).await {
                                         Ok(r) => Ok::<_, anyhow::Error>(r),
                                         Err(e) => {
                                             eprintln!("proxy error: {e:#}");
@@ -309,34 +218,15 @@ pub async fn run_proxy(
                                         }
                                     }
                                 }
-                            })
-                        };
-
-                        let result = if first == TLS_HANDSHAKE_RECORD {
-                            let tls_stream = match tls_acceptor.accept(prepend).await {
-                                Ok(s) => s,
-                                Err(e) => {
-                                    eprintln!("TLS handshake failed: {e}");
-                                    return;
-                                }
-                            };
-                            HttpBuilder::new(TokioExecutor::new())
-                                .serve_connection_with_upgrades(
-                                    hyper_util::rt::TokioIo::new(tls_stream),
-                                    service(true),
-                                )
-                                .await
-                        } else {
-                            // Plain HTTP (e.g. ws://) - some clients send this when wss fails or as fallback
-                            HttpBuilder::new(TokioExecutor::new())
-                                .serve_connection_with_upgrades(
-                                    hyper_util::rt::TokioIo::new(prepend),
-                                    service(false),
-                                )
-                                .await
-                        };
-
-                        if let Err(e) = result {
+                            }
+                        });
+                        if let Err(e) = HttpBuilder::new(TokioExecutor::new())
+                            .serve_connection_with_upgrades(
+                                hyper_util::rt::TokioIo::new(tls_stream),
+                                service,
+                            )
+                            .await
+                        {
                             eprintln!("connection error: {e:#}");
                         }
                     });
@@ -350,36 +240,21 @@ pub async fn run_proxy(
     Ok(())
 }
 
-/// Parse "host" or "host:port" into (normalized_domain, optional_port).
+/// Parse "host" or "host:port" into (domain, optional_port).
 fn parse_host(s: &str) -> (String, Option<u16>) {
-    let s = s.strip_suffix('.').unwrap_or(s).trim();
-    // IPv6: [::1]:443 - port is after the closing bracket
-    let (host_part, port_part) = if let Some(bracket) = s.find('[') {
-        if let Some(bracket_end) = s[bracket..].find(']') {
-            let end = bracket + bracket_end + 1;
-            if end < s.len() && s.as_bytes().get(end) == Some(&b':') {
-                (s[..end].to_string(), s[end + 1..].parse::<u16>().ok())
-            } else {
-                (s.to_string(), None)
+    let s = s.trim();
+    let (host, port) = match s.rfind(':') {
+        Some(colon) => {
+            let (h, p) = s.split_at(colon);
+            let port_str = p.trim_start_matches(':');
+            match port_str.parse::<u16>() {
+                Ok(port) => (h, Some(port)),
+                Err(_) => (s, None),
             }
-        } else {
-            (s.to_string(), None)
         }
-    } else {
-        // hostname:port
-        match s.rfind(':') {
-            Some(colon) => {
-                let (h, p) = s.split_at(colon);
-                let port_str = p.trim_start_matches(':');
-                match port_str.parse::<u16>() {
-                    Ok(port) => (h.to_string(), Some(port)),
-                    Err(_) => (s.to_string(), None),
-                }
-            }
-            None => (s.to_string(), None),
-        }
+        None => (s, None),
     };
-    (host_part.to_lowercase(), port_part)
+    (host.to_lowercase(), port)
 }
 
 async fn proxy_request(
@@ -387,7 +262,6 @@ async fn proxy_request(
     remote_addr: SocketAddr,
     mappings: &HashMap<String, u16>,
     client: &Client<HttpConnector, Incoming>,
-    is_tls: bool,
 ) -> Result<Response<Full<Bytes>>, anyhow::Error> {
     use http_body_util::BodyExt;
 
@@ -407,26 +281,16 @@ async fn proxy_request(
         }
     };
 
-    // When a specific port is in the URL (e.g. https://bjoernf.local:5173), forward to that backend.
-    // Otherwise use the mapping (e.g. bjoernf.local:443 -> mapped port for main app).
-    let port = if let Some(p) = explicit_port {
-        if p == 443 {
-            mappings.get(&domain).copied().or_else(|| {
-                mappings
-                    .iter()
-                    .find(|(k, _)| k.eq_ignore_ascii_case(&domain))
-                    .map(|(_, p)| *p)
-            })
-        } else {
-            Some(p)
-        }
-    } else {
-        mappings.get(&domain).copied().or_else(|| {
-            mappings
-                .iter()
-                .find(|(k, _)| k.eq_ignore_ascii_case(&domain))
-                .map(|(_, p)| *p)
-        })
+    let port = match explicit_port {
+        Some(443) => mappings
+            .get(&domain)
+            .copied()
+            .or_else(|| mappings.iter().find(|(k, _)| k.eq_ignore_ascii_case(&domain)).map(|(_, p)| *p)),
+        Some(p) => Some(p),
+        None => mappings
+            .get(&domain)
+            .copied()
+            .or_else(|| mappings.iter().find(|(k, _)| k.eq_ignore_ascii_case(&domain)).map(|(_, p)| *p)),
     };
 
     let port = match port {
@@ -441,24 +305,14 @@ async fn proxy_request(
         }
     };
 
-    let host = Some(domain);
-
     let backend = format!("http://localhost:{}", port);
 
-    // Add X-Forwarded-* headers
     req.headers_mut()
         .insert("x-forwarded-for", remote_addr.to_string().parse().unwrap());
-    req.headers_mut().insert(
-        "x-forwarded-proto",
-        (if is_tls { "https" } else { "http" }).parse().unwrap(),
-    );
-    if let Some(ref h) = host {
-        req.headers_mut()
-            .insert("x-forwarded-host", h.parse().unwrap());
-    }
-
-    // Preserve the original Host header (like Nginx proxy_set_header Host $host).
-    // Vite and other dev servers expect it for HMR WebSocket validation.
+    req.headers_mut()
+        .insert("x-forwarded-proto", "https".parse().unwrap());
+    req.headers_mut()
+        .insert("x-forwarded-host", domain.parse().unwrap());
 
     let uri = format!(
         "{}{}",
@@ -470,7 +324,6 @@ async fn proxy_request(
     );
     *req.uri_mut() = uri.parse().unwrap();
 
-    // Check if this is a WebSocket upgrade request.
     let is_ws_upgrade = req
         .headers()
         .get(CONNECTION)
@@ -492,7 +345,6 @@ async fn proxy_request(
         .with_context(|| format!("connect to backend {backend}"))?;
 
     if response.status() == StatusCode::SWITCHING_PROTOCOLS {
-        // WebSocket (or other upgrade): tunnel the connection instead of request/response.
         let client_upgrade = upgrade::on(&mut response);
         let (parts, _body) = response.into_parts();
 
@@ -505,7 +357,10 @@ async fn proxy_request(
                         if let Err(e) =
                             tokio::io::copy_bidirectional(&mut server_io, &mut client_io).await
                         {
-                            eprintln!("WebSocket tunnel error: {e}");
+                            let msg = e.to_string();
+                            if !msg.contains("close_notify") && !msg.contains("connection reset") {
+                                eprintln!("WebSocket tunnel error: {e}");
+                            }
                         }
                     }
                     Err(e) => eprintln!("WebSocket upgrade failed: {e}"),
@@ -513,7 +368,6 @@ async fn proxy_request(
             });
         }
 
-        // For 101 Switching Protocols, do NOT strip Upgrade/Connection — the client needs them.
         return Ok(Response::from_parts(parts, Full::from(Bytes::new())));
     }
 
