@@ -25,7 +25,7 @@ pub fn validate_domain(domain: &str, allow_any_tld: bool) -> Result<()> {
     }
     let tld = parts.last().unwrap().to_lowercase();
     if !TLD_ALLOWLIST.contains(&tld.as_str()) {
-        anyhow::bail!("TLD .{} not in allowlist; use --allow to override", tld);
+        anyhow::bail!("TLD .{tld} not in allowlist; use --allow to override");
     }
     validate_hostname(domain)
 }
@@ -47,7 +47,7 @@ pub fn validate_hostname(domain: &str) -> Result<()> {
         }
         for c in label.chars() {
             if !c.is_ascii_alphanumeric() && c != '-' {
-                anyhow::bail!("invalid hostname: illegal char {:?}", c);
+                anyhow::bail!("invalid hostname: illegal char {c:?}");
             }
         }
         if label.starts_with('-') || label.ends_with('-') {
@@ -72,7 +72,7 @@ pub fn add_domain(
         config.default_ca.clone()
     };
     if !crate::ca::ca_exists(paths, &ca_name) {
-        anyhow::bail!("CA '{}' does not exist; run 'roost ca create {}' first", ca_name, ca_name);
+        anyhow::bail!("CA '{ca_name}' does not exist; run 'roost ca create {ca_name}' first");
     }
 
     cert::ensure_cert_valid(paths, domain, &ca_name, exact)?;
@@ -111,10 +111,10 @@ pub fn remove_domain(
 /// Re-sign domain cert with different CA.
 pub fn set_ca(paths: &RoostPaths, config: &mut Config, domain: &str, ca_name: &str) -> Result<()> {
     if !config.domains.contains_key(domain) {
-        anyhow::bail!("domain '{}' not found", domain);
+        anyhow::bail!("domain '{domain}' not found");
     }
     if !crate::ca::ca_exists(paths, ca_name) {
-        anyhow::bail!("CA '{}' does not exist", ca_name);
+        anyhow::bail!("CA '{ca_name}' does not exist");
     }
 
     config.domains.insert(domain.to_string(), ca_name.to_string());

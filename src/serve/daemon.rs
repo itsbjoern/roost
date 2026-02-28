@@ -103,7 +103,7 @@ pub fn start_daemon(paths: &RoostPaths) -> Result<()> {
     };
     write_state(paths, &state)?;
 
-    println!("Daemon started (pid={})", pid);
+    println!("Daemon started (pid={pid})");
     Ok(())
 }
 

@@ -21,7 +21,7 @@ pub fn create_ca(paths: &RoostPaths, name: &str) -> Result<()> {
     params.distinguished_name = rcgen::DistinguishedName::new();
     params.distinguished_name.push(
         rcgen::DnType::CommonName,
-        rcgen::DnValue::Utf8String(format!("Roost CA ({})", name)),
+        rcgen::DnValue::Utf8String(format!("Roost CA ({name})")),
     );
     params.is_ca = IsCa::Ca(rcgen::BasicConstraints::Unconstrained);
     params.key_usages = vec![
@@ -79,7 +79,7 @@ pub fn remove_ca(paths: &RoostPaths, name: &str) -> Result<()> {
     let config = store::load_config(paths)?;
     for (_domain, ca) in &config.domains {
         if ca == name {
-            anyhow::bail!("cannot remove CA '{}': domain '{}' uses it", name, _domain);
+            anyhow::bail!("cannot remove CA '{name}': domain '{_domain}' uses it");
         }
     }
     let ca_dir = paths.ca_dir.join(name);

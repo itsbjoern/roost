@@ -372,7 +372,7 @@ fn cmd_serve(paths: &RoostPaths, cmd: Option<ServeCmd>) -> Result<()> {
                     let mut serve_cfg = ServeConfig::load(&rc_path)?;
                     serve_cfg.add(domain.clone(), p);
                     serve_cfg.save(&rc_path)?;
-                    if let Some(_) = crate::serve::daemon::daemon_status(paths)? {
+                    if crate::serve::daemon::daemon_status(paths)?.is_some() {
                         let _ = crate::serve::daemon::reload_daemon(paths);
                     }
                     println!("Added mapping: {domain} -> localhost:{p}");
@@ -383,7 +383,7 @@ fn cmd_serve(paths: &RoostPaths, cmd: Option<ServeCmd>) -> Result<()> {
                     let mut serve_cfg = ServeConfig::load(&rc_path)?;
                     serve_cfg.remove(&domain);
                     serve_cfg.save(&rc_path)?;
-                    if let Some(_) = crate::serve::daemon::daemon_status(paths)? {
+                    if crate::serve::daemon::daemon_status(paths)?.is_some() {
                         let _ = crate::serve::daemon::reload_daemon(paths);
                     }
                     println!("Removed mapping: {domain}");

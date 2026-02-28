@@ -140,13 +140,13 @@ pub fn cert_expires_within_days(path: &Path, days: u32) -> Result<bool> {
         .context("parse cert PEM")?;
 
     let (_, cert) = x509_parser::prelude::X509Certificate::from_der(cert_der.as_ref())
-        .map_err(|e| anyhow::anyhow!("parse X.509: {:?}", e))?;
+        .map_err(|e| anyhow::anyhow!("parse X.509: {e:?}"))?;
 
     let now = time::OffsetDateTime::now_utc();
     let validity = cert.validity();
     let expiry_ts = validity.not_after.timestamp();
     let expiry_ot = time::OffsetDateTime::from_unix_timestamp(expiry_ts)
-        .map_err(|e| anyhow::anyhow!("invalid expiry: {:?}", e))?;
+        .map_err(|e| anyhow::anyhow!("invalid expiry: {e:?}"))?;
 
     let threshold = now + time::Duration::days(days as i64);
     Ok(expiry_ot < threshold)

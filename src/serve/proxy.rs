@@ -68,7 +68,7 @@ fn build_cert_resolver(
     let mut certs: HashMap<String, Arc<CertifiedKey>> = HashMap::new();
 
     let mut domains: Vec<_> = mappings.keys().collect();
-    domains.sort_by(|a, b| b.len().cmp(&a.len()));
+    domains.sort_by_key(|b| std::cmp::Reverse(b.len()));
 
     for domain in domains {
         let cert_path = paths.certs_dir.join(format!("{domain}.pem"));
@@ -121,7 +121,7 @@ async fn redirect_http_to_https(
         .path_and_query()
         .map(|pq| pq.as_str())
         .unwrap_or("/");
-    let location = format!("https://{}{}", host, path);
+    let location = format!("https://{host}{path}");
     let _ = req.into_body().collect().await;
     Ok(Response::builder()
         .status(StatusCode::PERMANENT_REDIRECT)
@@ -184,7 +184,7 @@ pub async fn run_proxy(
             let tls_acceptor = tls_acceptor.clone();
             let http_client = http_client.clone();
             let listener = TcpListener::bind(SocketAddr::from(([0, 0, 0, 0], port))).await?;
-            eprintln!("Proxy listening on https://0.0.0.0:{}", port);
+            eprintln!("Proxy listening on https://0.0.0.0:{port}");
             tokio::spawn(async move {
                 loop {
                     let (tcp_stream, remote_addr) = match listener.accept().await {
@@ -316,7 +316,7 @@ async fn proxy_request(
         }
     };
 
-    let backend = format!("http://localhost:{}", port);
+    let backend = format!("http://localhost:{port}");
 
     req.headers_mut()
         .insert("x-forwarded-for", remote_addr.to_string().parse().unwrap());
