@@ -41,7 +41,7 @@ Visit `https://api.example.local:8443` (or use port 443 with elevated privileges
 
 | Action | Required |
 |--------|----------|
-| CA install / uninstall | Admin (macOS: native dialog; Linux: pkexec) |
+| CA install / uninstall | Admin (macOS: osascript; Linux: sudo) |
 | Hosts file edit | Admin (same escalation) |
 | Port 443 | Root or `CAP_NET_BIND_SERVICE` |
 | Port 8443+ | None (use `--port 8443`) |
@@ -53,7 +53,7 @@ Visit `https://api.example.local:8443` (or use port 443 with elevated privileges
 - **Config merge**: Project `.roostrc` in cwd plus global `~/.roost/.roostrc`; project overrides on conflict
 - **Daemon**: `roost serve daemon start|stop|status|reload`; config add/remove triggers reload when running
 - **Auto renewal**: Certs expiring within 30 days are regenerated automatically
-- **Parseable output**: `roost domain get-cert <domain>` prints `cert:` and `key:` paths for scripting
+- **Parseable output**: `roost domain get-path cert <domain>` and `get-path key <domain>` print single paths for scripting
 
 ## Environment variables
 
@@ -79,7 +79,7 @@ Project `.roostrc` defines serve mappings; global `~/.roost/.roostrc` holds shar
 
 - `roost init` – One-time setup
 - `roost ca list|create|remove|install|uninstall` – CA management
-- `roost domain list|add|remove|set-ca|get-cert` – Domain management
+- `roost domain list|add|remove|set-ca|get-path` – Domain management
 - `roost serve [--port N]` – Start proxy (foreground)
 - `roost serve config add|remove|list` – Mappings
 - `roost serve daemon start|stop|status|reload` – Daemon control

@@ -1,7 +1,7 @@
 //! CLI definitions and command routing.
 
 use anyhow::Result;
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 use std::path::PathBuf;
 
 use crate::config::{project_roostrc, RoostPaths};
@@ -18,23 +18,24 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 pub enum Commands {
-    /// One-time setup: create default CA, install to trust store
+    /// One-time setup: creates default CA, config dir, installs CA to system trust store
     Init,
 
-    /// CA management
+    /// Manage certificate authorities (create, install, list, remove)
     Ca {
         #[command(subcommand)]
         cmd: CaCmd,
     },
 
-    /// Domain management (hosts, certs implicit)
+    /// Manage domains and their TLS certs (add, remove, list, get-path)
     Domain {
         #[command(subcommand)]
         cmd: DomainCmd,
     },
 
-    /// Reverse proxy server
+    /// Run the HTTPS reverse proxy (or manage config/daemon)
     Serve {
+        /// HTTPS port to listen on
         #[arg(long, short, default_value = "443")]
         port: u16,
         #[command(subcommand)]
@@ -44,13 +45,13 @@ pub enum Commands {
 
 #[derive(Subcommand)]
 pub enum CaCmd {
-    /// List all CAs
+    /// List all certificate authority names
     List,
-    /// Create CA (default name: "default")
+    /// Create a new CA (used to sign domain certs); defaults to "default"
     Create { name: Option<String> },
-    /// Remove CA (fails if domains use it)
+    /// Remove a CA; fails if any domain still uses it
     Remove { name: String },
-    /// Install CA into system trust store
+    /// Install CA into system trust store (macOS keychain, Linux ca-certificates)
     Install { name: Option<String> },
     /// Remove CA from system trust store
     Uninstall { name: Option<String> },
@@ -58,32 +59,46 @@ pub enum CaCmd {
 
 #[derive(Subcommand)]
 pub enum DomainCmd {
-    /// List domains (show CA per domain)
+    /// List all registered domains with their CA
     List,
-    /// Add domain, auto-create cert
+    /// Add domain, create signed cert, optionally add to /etc/hosts
     Add {
         domain: String,
+        /// Cert valid only for exact domain (no wildcard)
         #[arg(long)]
         exact: bool,
+        /// Allow any TLD (bypass allowlist)
         #[arg(long)]
         allow: bool,
     },
-    /// Remove domain and cert
+    /// Remove domain from config and delete its cert files
     Remove { domain: String },
-    /// Re-sign domain cert with different CA
+    /// Re-sign domain cert with a different CA
     SetCa { domain: String, ca_name: String },
-    /// Return cert and key paths (parseable)
-    GetCert { domain: String },
+    /// Print path to cert or key file (for scripting)
+    GetPath {
+        #[arg(value_enum)]
+        cert_or_key: CertOrKey,
+        domain: String,
+    },
+}
+
+#[derive(Clone, Copy, ValueEnum)]
+pub enum CertOrKey {
+    /// Certificate file (domain.pem)
+    Cert,
+    /// Private key file (domain-key.pem)
+    Key,
 }
 
 #[derive(Subcommand)]
 pub enum ServeCmd {
-    /// Add mapping; auto-adds domain if not registered
+    /// Manage domain -> port mappings (.roostrc)
     Config {
         #[command(subcommand)]
         cmd: ServeConfigCmd,
     },
-    /// Start proxy as background daemon
+    /// Run proxy as background daemon (start, stop, status, reload)
     Daemon {
         #[command(subcommand)]
         cmd: ServeDaemonCmd,
@@ -92,25 +107,34 @@ pub enum ServeCmd {
 
 #[derive(Subcommand)]
 pub enum ServeConfigCmd {
+    /// Add domain -> port mapping; auto-adds domain if not yet registered
     Add {
         domain: String,
         port: u16,
+        /// Write to global .roostrc instead of project .roostrc
         #[arg(long)]
         global: bool,
     },
+    /// Remove domain -> port mapping
     Remove {
         domain: String,
+        /// Remove from global .roostrc instead of project
         #[arg(long)]
         global: bool,
     },
+    /// List all domain -> port mappings (project + global)
     List,
 }
 
 #[derive(Subcommand)]
 pub enum ServeDaemonCmd {
+    /// Start proxy daemon in background
     Start,
+    /// Stop running proxy daemon
     Stop,
+    /// Show daemon status (pid, project path)
     Status,
+    /// Reload config without restarting
     Reload,
 }
 
@@ -229,10 +253,13 @@ fn cmd_domain(paths: &RoostPaths, cmd: DomainCmd) -> Result<()> {
             println!("Set CA for {domain}: {ca_name}");
             Ok(())
         }
-        DomainCmd::GetCert { domain } => {
+        DomainCmd::GetPath { cert_or_key, domain } => {
             let (cert_path, key_path) = crate::domain::get_cert_paths(paths, &domain);
-            println!("cert: {}", cert_path.display());
-            println!("key: {}", key_path.display());
+            let path = match cert_or_key {
+                CertOrKey::Cert => cert_path,
+                CertOrKey::Key => key_path,
+            };
+            println!("{}", path.display());
             Ok(())
         }
     }
