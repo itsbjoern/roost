@@ -216,4 +216,10 @@ impl HostsEditor for UnixHostsEditor {
         // Filter out lines for domain
         Ok(())
     }
+
+    fn has_domain(&self, domain: &str) -> Result<bool> {
+        let hosts_path = "/etc/hosts";
+        let content = std::fs::read_to_string(hosts_path).unwrap_or_default();
+        Ok(super::domain_in_hosts_content(&content, domain))
+    }
 }

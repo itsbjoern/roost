@@ -38,6 +38,9 @@ pub enum Commands {
         #[command(subcommand)]
         cmd: Option<ServeCmd>,
     },
+
+    /// Check configuration health (CA, hosts, certs, trust store)
+    Doctor,
 }
 
 #[derive(Subcommand)]
@@ -178,6 +181,7 @@ pub fn run() -> Result<()> {
         Commands::Ca { cmd } => cmd_ca(&paths, cmd),
         Commands::Domain { cmd } => cmd_domain(&paths, cmd),
         Commands::Serve { cmd } => cmd_serve(&paths, cmd),
+        Commands::Doctor => cmd_doctor(&paths),
     }
 }
 
@@ -206,6 +210,25 @@ fn cmd_init(paths: &RoostPaths) -> Result<()> {
     }
 
     println!("Roost initialised at {}", paths.config_dir.display());
+    Ok(())
+}
+
+fn cmd_doctor(paths: &RoostPaths) -> Result<()> {
+    let cwd = std::env::current_dir()?;
+    let results = crate::doctor::run_checks(paths, &cwd)?;
+
+    let mut has_failures = false;
+    for r in &results {
+        let prefix = if r.ok { "✓" } else { "✗" };
+        println!("{prefix} {}", r.message);
+        if !r.ok {
+            has_failures = true;
+        }
+    }
+
+    if has_failures {
+        std::process::exit(1);
+    }
     Ok(())
 }
 

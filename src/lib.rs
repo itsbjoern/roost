@@ -3,6 +3,7 @@
 pub mod ca;
 pub mod cert;
 pub mod cli;
+pub mod doctor;
 pub mod config;
 pub mod domain;
 pub mod hosts;

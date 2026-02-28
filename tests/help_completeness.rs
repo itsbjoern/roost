@@ -17,6 +17,11 @@ fn help_init() {
 }
 
 #[test]
+fn help_doctor() {
+    roost().args(["doctor", "--help"]).assert().success();
+}
+
+#[test]
 fn help_ca() {
     roost().args(["ca", "--help"]).assert().success();
 }

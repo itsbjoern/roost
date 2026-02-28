@@ -27,6 +27,8 @@ pub trait HostsEditor: Send + Sync {
     fn add_domain(&self, domain: &str) -> Result<()>;
     /// Remove domain from hosts file.
     fn remove_domain(&self, domain: &str) -> Result<()>;
+    /// Check if domain is in hosts file (127.0.0.1 and ::1).
+    fn has_domain(&self, domain: &str) -> Result<bool>;
 }
 
 /// Get platform TrustStore implementation.
@@ -67,6 +69,28 @@ impl FileHostsEditor {
     }
 }
 
+/// Check if hosts file content contains both 127.0.0.1 and ::1 entries for domain.
+pub(crate) fn domain_in_hosts_content(content: &str, domain: &str) -> bool {
+    let mut has_ipv4 = false;
+    let mut has_ipv6 = false;
+    for line in content.lines() {
+        let line = line.split('#').next().unwrap_or(line).trim();
+        let parts: Vec<&str> = line.split_whitespace().collect();
+        if parts.len() >= 2 {
+            let ip = parts[0];
+            let hostnames = &parts[1..];
+            if hostnames.contains(&domain) {
+                if ip == "127.0.0.1" {
+                    has_ipv4 = true;
+                } else if ip == "::1" {
+                    has_ipv6 = true;
+                }
+            }
+        }
+    }
+    has_ipv4 && has_ipv6
+}
+
 impl HostsEditor for FileHostsEditor {
     fn add_domain(&self, domain: &str) -> Result<()> {
         let content = std::fs::read_to_string(&self.path).unwrap_or_default();
@@ -90,5 +114,10 @@ impl HostsEditor for FileHostsEditor {
         let lines: Vec<&str> = content.lines().filter(|l| !l.contains(domain)).collect();
         std::fs::write(&self.path, lines.join("\n"))?;
         Ok(())
+    }
+
+    fn has_domain(&self, domain: &str) -> Result<bool> {
+        let content = std::fs::read_to_string(&self.path).unwrap_or_default();
+        Ok(domain_in_hosts_content(&content, domain))
     }
 }

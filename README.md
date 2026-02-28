@@ -112,6 +112,7 @@ ports = [80, 443]   # optional; defaults to [80, 443]
 ## Commands
 
 - `roost init` – One-time setup
+- `roost doctor` – Check configuration health (CA, hosts, certs, trust store)
 - `roost ca list|create|remove|install|uninstall` – CA management
 - `roost domain list|add|remove|set-ca|get-path` – Domain management
 - `roost serve` – Start proxy (foreground; ports from config)

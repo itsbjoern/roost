@@ -80,4 +80,10 @@ impl HostsEditor for WindowsHostsEditor {
     fn remove_domain(&self, _domain: &str) -> Result<()> {
         Ok(())
     }
+
+    fn has_domain(&self, domain: &str) -> Result<bool> {
+        let hosts_path = r"C:\Windows\System32\drivers\etc\hosts";
+        let content = std::fs::read_to_string(hosts_path).unwrap_or_default();
+        Ok(super::domain_in_hosts_content(&content, domain))
+    }
 }

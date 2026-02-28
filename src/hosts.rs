@@ -13,3 +13,8 @@ pub fn add_domain_to_hosts(editor: &dyn HostsEditor, domain: &str) -> Result<()>
 pub fn remove_domain_from_hosts(editor: &dyn HostsEditor, domain: &str) -> Result<()> {
     editor.remove_domain(domain)
 }
+
+/// Check if domain is in hosts file.
+pub fn domain_in_hosts(editor: &dyn HostsEditor, domain: &str) -> Result<bool> {
+    editor.has_domain(domain)
+}
