@@ -128,16 +128,15 @@ pub fn stop_daemon(paths: &RoostPaths) -> Result<()> {
         unsafe {
             libc::kill(state.pid as i32, libc::SIGTERM);
         }
+        clear_state(paths)?;
+        println!("Daemon stopped (pid={})", state.pid);
+        return Ok(());
     }
     #[cfg(not(unix))]
     {
         let _ = state;
         anyhow::bail!("daemon stop not implemented on this platform");
     }
-
-    clear_state(paths)?;
-    println!("Daemon stopped (pid={})", state.pid);
-    Ok(())
 }
 
 /// Get daemon status. Returns None if not running or state is stale.
@@ -174,13 +173,12 @@ pub fn reload_daemon(paths: &RoostPaths) -> Result<()> {
                 anyhow::bail!("Failed to send SIGHUP to daemon");
             }
         }
+        println!("Reload signal sent to daemon (pid={})", state.pid);
+        return Ok(());
     }
     #[cfg(not(unix))]
     {
         let _ = state;
         anyhow::bail!("daemon reload not implemented on this platform");
     }
-
-    println!("Reload signal sent to daemon (pid={})", state.pid);
-    Ok(())
 }
