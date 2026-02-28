@@ -1,7 +1,7 @@
 //! CA creation, loading, and removal.
 
 use anyhow::{Context, Result};
-use rcgen::{Certificate, CertificateParams, IsCa, KeyPair};
+use rcgen::{CertificateParams, IsCa, KeyPair};
 use std::fs;
 use std::io::Write;
 

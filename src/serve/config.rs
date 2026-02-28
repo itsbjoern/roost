@@ -41,10 +41,9 @@ impl ServeConfig {
     pub fn load(path: &Path) -> Result<Self> {
         if path.is_file() {
             let mut file = fs::OpenOptions::new().read(true).open(path)?;
-            let _lock = fs2::FileExt::lock_shared(&file)?;
+            fs2::FileExt::lock_shared(&file)?;
             let mut s = String::new();
             file.read_to_string(&mut s)?;
-            drop(_lock);
             let rc: RoostRc = toml::from_str(&s)?;
             let mut cfg = rc.serve;
             cfg.mappings.retain(|m| !m.domain.is_empty());
@@ -68,9 +67,8 @@ impl ServeConfig {
             .write(true)
             .truncate(true)
             .open(path)?;
-        let _lock = fs2::FileExt::lock_exclusive(&file)?;
+        fs2::FileExt::lock_exclusive(&file)?;
         file.write_all(s.as_bytes())?;
-        drop(_lock);
         Ok(())
     }
 

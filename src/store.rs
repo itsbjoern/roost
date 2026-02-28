@@ -1,7 +1,6 @@
 //! Data store operations and directory layout.
 
 use anyhow::Result;
-use std::path::Path;
 
 use crate::config::{Config, RoostPaths};
 

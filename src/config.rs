@@ -43,7 +43,7 @@ impl RoostPaths {
     pub fn default_paths() -> Self {
         let base = if let Ok(home) = std::env::var("ROOST_HOME") {
             PathBuf::from(home)
-        } else if let Some(dirs) = directories::ProjectDirs::from("com", "roost", "roost") {
+        } else if let Some(dirs) = directories::ProjectDirs::from("com", "bjoernf", "roost") {
             dirs.data_dir().to_path_buf()
         } else {
             PathBuf::from(".roost")
@@ -80,14 +80,11 @@ impl Config {
     /// Load config from paths (with shared lock when file exists).
     pub fn load(paths: &RoostPaths) -> Result<Config> {
         if paths.config_file.is_file() {
-            let mut file = fs::OpenOptions::new()
-                .read(true)
-                .open(&paths.config_file)?;
-            let _lock = fs2::FileExt::lock_shared(&file)?;
+            let mut file = fs::OpenOptions::new().read(true).open(&paths.config_file)?;
+            fs2::FileExt::lock_shared(&file)?;
             use std::io::Read;
             let mut s = String::new();
             file.read_to_string(&mut s)?;
-            drop(_lock);
             let cfg: Config = toml::from_str(&s)?;
             Ok(cfg)
         } else {
@@ -105,11 +102,10 @@ impl Config {
             .write(true)
             .truncate(true)
             .open(&paths.config_file)?;
-        let _lock = fs2::FileExt::lock_exclusive(&file)?;
+        fs2::FileExt::lock_exclusive(&file)?;
         let s = toml::to_string_pretty(self)?;
         use std::io::Write;
         file.write_all(s.as_bytes())?;
-        drop(_lock);
         Ok(())
     }
 }

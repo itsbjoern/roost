@@ -13,12 +13,13 @@ impl TrustStore for UnixTrustStore {
         #[cfg(target_os = "macos")]
         {
             let path = ca_pem_path.to_string_lossy();
+            let path_escaped = path.replace('"', "\\\"");
             Command::new("osascript")
                 .args([
                     "-e",
                     &format!(
-                        "do shell script \"security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain {}\" with administrator privileges",
-                        path.replace('"', "\\\"")
+                        "do shell script \"security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain \\\"{}\\\"\" with administrator privileges",
+                        path_escaped
                     ),
                 ])
                 .status()

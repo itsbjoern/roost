@@ -92,8 +92,17 @@ pub enum ServeCmd {
 
 #[derive(Subcommand)]
 pub enum ServeConfigCmd {
-    Add { domain: String, port: u16, #[arg(long)] global: bool },
-    Remove { domain: String, #[arg(long)] global: bool },
+    Add {
+        domain: String,
+        port: u16,
+        #[arg(long)]
+        global: bool,
+    },
+    Remove {
+        domain: String,
+        #[arg(long)]
+        global: bool,
+    },
     List,
 }
 
@@ -142,7 +151,7 @@ fn cmd_init(paths: &RoostPaths) -> Result<()> {
         }
     }
 
-    println!("Roost initialized at {}", paths.config_dir.display());
+    println!("Roost initialised at {}", paths.config_dir.display());
     Ok(())
 }
 
@@ -192,7 +201,11 @@ fn cmd_domain(paths: &RoostPaths, cmd: DomainCmd) -> Result<()> {
             }
             Ok(())
         }
-        DomainCmd::Add { domain, exact, allow } => {
+        DomainCmd::Add {
+            domain,
+            exact,
+            allow,
+        } => {
             crate::domain::validate_domain(&domain, allow)?;
             let mut config = store::load_config(paths)?;
             let editor = crate::platform::default_hosts_editor();
@@ -324,7 +337,10 @@ fn cmd_serve(paths: &RoostPaths, port: u16, cmd: Option<ServeCmd>) -> Result<()>
             }
             ServeDaemonCmd::Status => {
                 if let Some(state) = crate::serve::daemon::daemon_status(paths)? {
-                    println!("Daemon running: pid={}, started={}", state.pid, state.started_at);
+                    println!(
+                        "Daemon running: pid={}, started={}",
+                        state.pid, state.started_at
+                    );
                     if let Some(ref p) = state.project_path {
                         println!("  project: {}", p.display());
                     }
