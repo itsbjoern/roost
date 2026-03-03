@@ -1,0 +1,35 @@
+#!/usr/bin/env node
+
+const fs = require("fs");
+const path = require("path");
+const { spawn } = require("child_process");
+
+function run() {
+  const exeName = process.platform === "win32" ? "roost.exe" : "roost";
+  const exePath = path.join(__dirname, exeName);
+
+  if (!fs.existsSync(exePath)) {
+    console.error(
+      "roost: binary not found. Try reinstalling:\n" +
+        "  npm uninstall -g @itsbjoern/roost && npm install -g @itsbjoern/roost\n" +
+        "or download a release binary / build from source:\n" +
+        "  https://github.com/itsbjoern/roost#install"
+    );
+    process.exit(1);
+  }
+
+  const child = spawn(exePath, process.argv.slice(2), {
+    stdio: "inherit",
+  });
+
+  child.on("exit", (code, signal) => {
+    if (signal) {
+      process.kill(process.pid, signal);
+    } else {
+      process.exit(code == null ? 1 : code);
+    }
+  });
+}
+
+run();
+

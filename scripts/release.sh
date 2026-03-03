@@ -7,6 +7,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 CARGO_TOML="$ROOT_DIR/Cargo.toml"
+NPM_PACKAGE_JSON="$ROOT_DIR/npm/package.json"
 
 bump="${1:-}"
 push_auto=false
@@ -61,11 +62,23 @@ else
   sed -i "s/^version = .*/version = \"$new_version\"/" "$CARGO_TOML"
 fi
 
+# Update npm package.json (if present) to keep npm and crate versions in sync
+if [[ -f "$NPM_PACKAGE_JSON" ]]; then
+  if [[ "$(uname)" == "Darwin" ]]; then
+    sed -i '' "s/\"version\": \".*\"/\"version\": \"$new_version\"/" "$NPM_PACKAGE_JSON"
+  else
+    sed -i "s/\"version\": \".*\"/\"version\": \"$new_version\"/" "$NPM_PACKAGE_JSON"
+  fi
+fi
+
 # Update Cargo.lock
 cargo build --release -q
 
 # Commit and tag
 git add Cargo.toml Cargo.lock
+if [[ -f "$NPM_PACKAGE_JSON" ]]; then
+  git add "$NPM_PACKAGE_JSON"
+fi
 git commit -m "Release v$new_version"
 git tag "v$new_version"
 

@@ -1,0 +1,44 @@
+{
+  "name": "@itsbjoern/roost",
+  "version": "0.1.4",
+  "description": "Roost CLI - local HTTPS reverse proxy with automatic cert management",
+  "bin": {
+    "roost": "bin/roost"
+  },
+  "scripts": {
+    "postinstall": "node install.js"
+  },
+  "files": [
+    "bin/",
+    "install.js",
+    "README.md"
+  ],
+  "keywords": [
+    "https",
+    "tls",
+    "ssl",
+    "certificates",
+    "proxy",
+    "local-development",
+    "devtools"
+  ],
+  "author": "Björn Friedrichs (https://bjoernf.com)",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/itsbjoern/roost.git"
+  },
+  "bugs": {
+    "url": "https://github.com/itsbjoern/roost/issues"
+  },
+  "homepage": "https://github.com/itsbjoern/roost#readme",
+  "engines": {
+    "node": ">=16"
+  },
+  "dependencies": {
+    "tar": "^7.4.3"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

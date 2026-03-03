@@ -7,7 +7,17 @@ A local HTTPS reverse proxy that manages certificate authorities, signed domain 
 
 ## Install
 
-**Download a release** (recommended):
+**Install via npm** (recommended, requires Node.js 16+):
+
+```bash
+npm install -g @itsbjoern/roost
+roost init
+```
+
+This installs the `roost` CLI globally and downloads a prebuilt binary for your platform
+from the GitHub Releases of this repository.
+
+**Download a release binary**:
 
 1. Go to [Releases](https://github.com/itsbjoern/roost/releases) and download the archive for your platform (Linux, macOS, or Windows).
 2. Extract the `roost` binary to a directory in your `PATH`.
