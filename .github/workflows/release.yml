@@ -58,6 +58,10 @@ jobs:
         working-directory: npm
         run: npm install
 
+      - name: Build TypeScript
+        working-directory: npm
+        run: npm run build
+
       - name: Publish @itsbjoern/roost to npm
         working-directory: npm
         run: npm publish

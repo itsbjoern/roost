@@ -5,3 +5,10 @@
 IMPLEMENTATION.md
 PLAN.md
 PROGRESS.md
+
+# npm package: build output and install artifacts (generated at release / npm install)
+npm/node_modules/
+npm/index.js
+npm/index.d.ts
+npm/index.d.ts.map
+npm/*.js.map

@@ -77,8 +77,8 @@ fn help_domain_set_ca() {
 }
 
 #[test]
-fn help_domain_get_path() {
-    roost().args(["domain", "get-path", "--help"]).assert().success();
+fn help_domain_path() {
+    roost().args(["domain", "path", "--help"]).assert().success();
 }
 
 #[test]

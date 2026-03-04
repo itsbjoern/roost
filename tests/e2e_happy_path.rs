@@ -1,4 +1,4 @@
-//! E2E: init -> add -> list -> get-path -> remove -> list empty.
+//! E2E: init -> add -> list -> path -> remove -> list empty.
 
 mod common;
 
@@ -41,11 +41,11 @@ fn e2e_happy_path() {
             .success()
             .stdout(predicate::str::contains("api.example.test"));
 
-        // get-path (parseable output)
+        // path (parseable output)
         let cert_out = Command::cargo_bin("roost")
             .unwrap()
             .current_dir(project_dir)
-            .args(["domain", "get-path", "cert", "api.example.test"])
+            .args(["domain", "path", "cert", "api.example.test"])
             .output()
             .unwrap();
         assert!(cert_out.status.success());
@@ -54,7 +54,7 @@ fn e2e_happy_path() {
         let key_out = Command::cargo_bin("roost")
             .unwrap()
             .current_dir(project_dir)
-            .args(["domain", "get-path", "key", "api.example.test"])
+            .args(["domain", "path", "key", "api.example.test"])
             .output()
             .unwrap();
         assert!(key_out.status.success());

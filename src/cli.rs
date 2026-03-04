@@ -27,7 +27,7 @@ pub enum Commands {
         cmd: CaCmd,
     },
 
-    /// Manage domains and their TLS certs (add, remove, list, get-path)
+    /// Manage domains and their TLS certs (add, remove, list, path)
     Domain {
         #[command(subcommand)]
         cmd: DomainCmd,
@@ -76,10 +76,19 @@ pub enum DomainCmd {
     /// Re-sign domain cert with a different CA
     SetCa { domain: String, ca_name: String },
     /// Print path to cert or key file (for scripting)
-    GetPath {
+    Path {
         #[arg(value_enum)]
         cert_or_key: CertOrKey,
         domain: String,
+        /// Create domain (run 'domain add') if it doesn't exist
+        #[arg(long)]
+        generate: bool,
+        /// When generating: cert valid only for exact domain (no wildcard)
+        #[arg(long)]
+        exact: bool,
+        /// When generating: allow any TLD (bypass allowlist)
+        #[arg(long)]
+        allow: bool,
     },
 }
 
@@ -308,7 +317,28 @@ fn cmd_domain(paths: &RoostPaths, cmd: DomainCmd) -> Result<()> {
             println!("Set CA for {domain}: {ca_name}");
             Ok(())
         }
-        DomainCmd::GetPath { cert_or_key, domain } => {
+        DomainCmd::Path {
+            cert_or_key,
+            domain,
+            generate,
+            exact,
+            allow,
+        } => {
+            if generate {
+                let mut config = store::load_config(paths)?;
+                if !config.domains.contains_key(&domain) {
+                    crate::domain::validate_domain(&domain, allow)?;
+                    let editor = crate::platform::default_hosts_editor();
+                    crate::domain::add_domain(
+                        paths,
+                        &mut config,
+                        &domain,
+                        exact,
+                        Some(editor.as_ref()),
+                    )?;
+                    store::save_config(paths, &config)?;
+                }
+            }
             let (cert_path, key_path) = crate::domain::get_cert_paths(paths, &domain);
             let path = match cert_or_key {
                 CertOrKey::Cert => cert_path,

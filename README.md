@@ -7,7 +7,7 @@ A local HTTPS reverse proxy that manages certificate authorities, signed domain 
 
 ## Install
 
-**Install via npm** (recommended, requires Node.js 16+):
+**Install via npm** (recommended, requires Node.js 18+):
 
 ```bash
 npm install -g @itsbjoern/roost
@@ -57,28 +57,27 @@ You can add a domain and use its certs in your own dev server—no proxy needed.
 ```bash
 roost domain add api.local
 # Get paths for your server config:
-roost domain get-path cert api.local   # → ~/.roost/certs/api.local.pem
-roost domain get-path key api.local    # → ~/.roost/certs/api.local-key.pem
+roost domain path cert api.local   # → ~/.roost/certs/api.local.pem
+roost domain path key api.local    # → ~/.roost/certs/api.local-key.pem
+
+# Create the domain if it doesn't exist:
+roost domain path cert api.local --generate
 ```
 
-Point your local server at those paths. Example with Vite:
+Point your local server at those paths. **Using the JS API** (recommended)—get the literal cert and key contents in one call:
 
 ```ts
 // vite.config.ts
 import { defineConfig } from 'vite';
-import { execSync } from 'child_process';
-import fs from 'fs';
+import { getDomainCerts } from '@itsbjoern/roost';
 
-const certPath = execSync('roost domain get-path cert api.local').toString().trim();
-const keyPath = execSync('roost domain get-path key api.local').toString().trim();
-
-export default defineConfig({
-  server: {
-    https: {
-      cert: fs.readFileSync(certPath),
-      key: fs.readFileSync(keyPath),
+export default defineConfig(async () => {
+  const { cert, key } = await getDomainCerts('api.local', { generate: true });
+  return {
+    server: {
+      https: { cert, key },
     },
-  },
+  };
 });
 ```
 
@@ -86,16 +85,19 @@ Or with Node's `https.createServer`:
 
 ```js
 const https = require('https');
-const { execSync } = require('child_process');
-const fs = require('fs');
+const { getDomainCerts } = require('@itsbjoern/roost');
 
-const cert = fs.readFileSync(execSync('roost domain get-path cert api.local').toString().trim());
-const key = fs.readFileSync(execSync('roost domain get-path key api.local').toString().trim());
-const server = https.createServer({ cert, key }, (req, res) => { /* ... */ });
-server.listen(5173);
+(async () => {
+  const { cert, key } = await getDomainCerts('api.local', { generate: true });
+  const server = https.createServer(
+    { cert, key },
+    (req, res) => { /* ... */ }
+  );
+  server.listen(5173);
+})();
 ```
 
-Your dev server then serves HTTPS directly at `https://api.local:5173` using Roost's trusted certs.
+Your dev server then serves HTTPS directly at `https://api.local:5173` using Roost's trusted certs. See [JavaScript API](#javascript-api) for all helpers.
 
 ## What it does
 
@@ -139,7 +141,7 @@ When you use an explicit port in the URL (e.g. `https://api.local:5173`), the pr
 | `roost ca uninstall [name]` | Remove CA from trust store |
 | `roost domain add <domain>` | Add domain, create cert, update hosts. Use `--exact` for no wildcard; `--allow` to bypass TLD allowlist |
 | `roost domain list` | List registered domains |
-| `roost domain get-path cert <domain>`, `key <domain>` | Print path to cert or key file (for scripting, e.g. with local HTTPS servers) |
+| `roost domain path cert <domain>`, `key <domain>` | Print path to cert or key file. Use `--generate` to create the domain if it doesn't exist |
 | `roost serve` | Start proxy (foreground) |
 | `roost serve config add <domain> <port>` | Map domain to port. Use `--global` to write to user config instead of project |
 | `roost serve config remove <domain>` | Remove mapping. Use `--global` for user config |
@@ -148,6 +150,30 @@ When you use an explicit port in the URL (e.g. `https://api.local:5173`), the pr
 | `roost serve daemon start` | Run proxy in background |
 
 Run `roost --help` or `roost <cmd> --help` for full usage.
+
+### JavaScript API
+
+When you install `@itsbjoern/roost` as a dependency, you can call Roost from Node instead:
+
+```js
+const { runRoost, getDomainPath, getDomainCertPath, getDomainKeyPath, getDomainPaths, getDomainCerts } = require('@itsbjoern/roost');
+// or: import { getDomainCerts, getDomainPaths } from '@itsbjoern/roost';
+```
+
+| Function | Description |
+|----------|-------------|
+| `runRoost(args, options?)` | Run the roost binary with the given args. Returns `Promise<{ stdout, stderr }>`. |
+| `getDomainCerts(domain, options?)` | **Build-tool friendly.** Resolve both cert and key **contents** (PEM strings). Returns `Promise<{ cert: string, key: string }>`. Pass directly to HTTPS config—no file reads. Use `generate: true` to create the domain if missing. |
+| `getDomainPaths(domain, options?)` | Resolve both cert and key **paths** (filesystem paths). Returns `Promise<{ cert: string, key: string }>`. |
+| `getDomainPath('cert' \| 'key', domain, options?)` | Resolve the path to a domain's cert or key file. |
+| `getDomainCertPath(domain, options?)` | Resolve the path to a domain's certificate file. |
+| `getDomainKeyPath(domain, options?)` | Resolve the path to a domain's private key file. |
+
+Path options (all optional):
+
+- **`generate`**: If `true`, runs `roost domain add` when the domain doesn't exist, so you get valid paths without a separate setup step.
+- **`exact`**: When using `generate`, create a cert for the exact domain only (no wildcard).
+- **`allow`**: When using `generate`, allow any TLD (bypass the allowlist).
 
 ### Global vs project config
 

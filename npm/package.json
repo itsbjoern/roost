@@ -2,13 +2,19 @@
   "name": "@itsbjoern/roost",
   "version": "0.1.4",
   "description": "Roost CLI - local HTTPS reverse proxy with automatic cert management",
+  "main": "index.js",
+  "types": "index.d.ts",
   "bin": {
     "roost": "bin/roost"
   },
   "scripts": {
-    "postinstall": "node install.js"
+    "build": "tsc",
+    "postinstall": "node install.js",
+    "prepublishOnly": "npm run build"
   },
   "files": [
+    "index.js",
+    "index.d.ts",
     "bin/",
     "install.js",
     "README.md"
@@ -33,10 +39,14 @@
   },
   "homepage": "https://github.com/itsbjoern/roost#readme",
   "engines": {
-    "node": ">=16"
+    "node": ">=18"
   },
   "dependencies": {
     "tar": "^7.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.0"
   },
   "publishConfig": {
     "access": "public"
