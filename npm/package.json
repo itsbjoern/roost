@@ -7,6 +7,11 @@
   "bin": {
     "roost": "bin/roost"
   },
+  "optionalDependencies": {
+    "@itsbjoern/roost-darwin-arm64": "0.1.8",
+    "@itsbjoern/roost-linux-x64": "0.1.8",
+    "@itsbjoern/roost-win32-x64": "0.1.8"
+  },
   "scripts": {
     "build": "tsc",
     "postinstall": "node install.js",

@@ -1,0 +1,16 @@
+{
+  "name": "@itsbjoern/roost-linux-x64",
+  "version": "0.1.8",
+  "description": "Roost CLI binary for Linux x64",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/itsbjoern/roost.git"
+  },
+  "os": ["linux"],
+  "cpu": ["x64"],
+  "engines": {
+    "node": ">=18"
+  },
+  "files": ["roost"]
+}

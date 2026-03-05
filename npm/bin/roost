@@ -1,35 +1,62 @@
 #!/usr/bin/env node
 
-const fs = require("fs");
+const { platform, arch } = process;
+const { spawnSync } = require("child_process");
 const path = require("path");
-const { spawn } = require("child_process");
+const fs = require("fs");
 
-function run() {
-  const exeName = process.platform === "win32" ? "roost.exe" : "roost-bin";
+const PLATFORMS = {
+  win32: {
+    x64: "@itsbjoern/roost-win32-x64/roost.exe",
+    arm64: null,
+  },
+  darwin: {
+    x64: null,
+    arm64: "@itsbjoern/roost-darwin-arm64/roost",
+  },
+  linux: {
+    x64: "@itsbjoern/roost-linux-x64/roost",
+    arm64: null,
+  },
+};
+
+const binPath =
+  PLATFORMS[platform] && PLATFORMS[platform][arch]
+    ? PLATFORMS[platform][arch]
+    : null;
+
+if (binPath) {
+  try {
+    const resolved = require.resolve(binPath);
+    const result = spawnSync(resolved, process.argv.slice(2), {
+      stdio: "inherit",
+      shell: false,
+    });
+    process.exitCode = result.status != null ? result.status : 1;
+  } catch (err) {
+    // Optional dependency not installed (e.g. unsupported platform or not yet published)
+    runFallback();
+  }
+} else {
+  runFallback();
+}
+
+function runFallback() {
+  const exeName = platform === "win32" ? "roost.exe" : "roost";
   const exePath = path.join(__dirname, exeName);
 
   if (!fs.existsSync(exePath)) {
     console.error(
-      "roost: binary not found. Try reinstalling:\n" +
-        "  npm uninstall -g @itsbjoern/roost && npm install -g @itsbjoern/roost\n" +
-        "or download a release binary / build from source:\n" +
+      "roost: binary not found for this platform.\n" +
+        "Install a prebuilt binary or build from source:\n" +
         "  https://github.com/itsbjoern/roost#install"
     );
     process.exit(1);
   }
 
-  const child = spawn(exePath, process.argv.slice(2), {
+  const result = spawnSync(exePath, process.argv.slice(2), {
     stdio: "inherit",
+    shell: false,
   });
-
-  child.on("exit", (code, signal) => {
-    if (signal) {
-      process.kill(process.pid, signal);
-    } else {
-      process.exit(code == null ? 1 : code);
-    }
-  });
+  process.exitCode = result.status != null ? result.status : 1;
 }
-
-run();
-

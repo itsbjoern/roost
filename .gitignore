@@ -12,3 +12,7 @@ npm/index.js
 npm/index.d.ts
 npm/index.d.ts.map
 npm/*.js.map
+
+npm/platforms/darwin-arm64/roost
+npm/platforms/linux-x64/roost
+npm/platforms/win32-x64/roost.exe

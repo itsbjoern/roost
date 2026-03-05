@@ -1,0 +1,16 @@
+{
+  "name": "@itsbjoern/roost-darwin-arm64",
+  "version": "0.1.8",
+  "description": "Roost CLI binary for macOS ARM64",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/itsbjoern/roost.git"
+  },
+  "os": ["darwin"],
+  "cpu": ["arm64"],
+  "engines": {
+    "node": ">=18"
+  },
+  "files": ["roost"]
+}

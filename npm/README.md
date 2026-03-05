@@ -1,23 +1,21 @@
 ## @itsbjoern/roost
 
-This is the npm wrapper for the Roost CLI. It downloads a prebuilt `roost` binary from GitHub Releases and exposes the `roost` command. You can also use the **JavaScript API** from Node without shelling out.
+CLI and JavaScript API for Roost (local HTTPS reverse proxy with automatic cert management). The package ships with platform-specific binaries (like [Biome](https://github.com/biomejs/biome)); after install you can run `roost` directly.
 
 ### Install
 
 ```bash
-# Global install — use `roost` from anywhere:
 npm install -g @itsbjoern/roost
-
-# Local install — use via npx:
-npm install @itsbjoern/roost
 ```
 
-Then (CLI):
+### Usage
 
 ```bash
 roost init          # after global install
-npx roost init      # after local install
+npx roost init      # without installing (npm)
 ```
+
+If `roost` is not found after a global install, add your package manager's global bin to `PATH` (e.g. `export PATH="$PATH:$(npm config get prefix)/bin"` for npm, or `export PATH="$PATH:$HOME/.bun/bin"` for Bun).
 
 ### JavaScript API
 
@@ -31,4 +29,3 @@ const { cert, key } = await getDomainCerts('api.local', { generate: true });
 ```
 
 See the [main README](https://github.com/itsbjoern/roost#javascript-api) for full API docs and examples.
-

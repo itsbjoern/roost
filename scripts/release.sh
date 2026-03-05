@@ -62,14 +62,33 @@ else
   sed -i "s/^version = .*/version = \"$new_version\"/" "$CARGO_TOML"
 fi
 
-# Update npm package.json (if present) to keep npm and crate versions in sync
+# Update npm package.json and all platform sub-packages to keep versions in sync
 if [[ -f "$NPM_PACKAGE_JSON" ]]; then
   if [[ "$(uname)" == "Darwin" ]]; then
     sed -i '' "s/\"version\": \".*\"/\"version\": \"$new_version\"/" "$NPM_PACKAGE_JSON"
   else
     sed -i "s/\"version\": \".*\"/\"version\": \"$new_version\"/" "$NPM_PACKAGE_JSON"
   fi
+  # Bump optionalDependencies in main package
+  if [[ "$(uname)" == "Darwin" ]]; then
+    sed -i '' "s/\"@itsbjoern\/roost-darwin-arm64\": \".*\"/\"@itsbjoern\/roost-darwin-arm64\": \"$new_version\"/" "$NPM_PACKAGE_JSON"
+    sed -i '' "s/\"@itsbjoern\/roost-linux-x64\": \".*\"/\"@itsbjoern\/roost-linux-x64\": \"$new_version\"/" "$NPM_PACKAGE_JSON"
+    sed -i '' "s/\"@itsbjoern\/roost-win32-x64\": \".*\"/\"@itsbjoern\/roost-win32-x64\": \"$new_version\"/" "$NPM_PACKAGE_JSON"
+  else
+    sed -i "s/\"@itsbjoern\/roost-darwin-arm64\": \".*\"/\"@itsbjoern\/roost-darwin-arm64\": \"$new_version\"/" "$NPM_PACKAGE_JSON"
+    sed -i "s/\"@itsbjoern\/roost-linux-x64\": \".*\"/\"@itsbjoern\/roost-linux-x64\": \"$new_version\"/" "$NPM_PACKAGE_JSON"
+    sed -i "s/\"@itsbjoern\/roost-win32-x64\": \".*\"/\"@itsbjoern\/roost-win32-x64\": \"$new_version\"/" "$NPM_PACKAGE_JSON"
+  fi
 fi
+for platform_json in "$ROOT_DIR"/npm/platforms/*/package.json; do
+  if [[ -f "$platform_json" ]]; then
+    if [[ "$(uname)" == "Darwin" ]]; then
+      sed -i '' "s/\"version\": \".*\"/\"version\": \"$new_version\"/" "$platform_json"
+    else
+      sed -i "s/\"version\": \".*\"/\"version\": \"$new_version\"/" "$platform_json"
+    fi
+  fi
+done
 
 # Update Cargo.lock
 cargo build --release -q
@@ -78,6 +97,7 @@ cargo build --release -q
 git add Cargo.toml Cargo.lock
 if [[ -f "$NPM_PACKAGE_JSON" ]]; then
   git add "$NPM_PACKAGE_JSON"
+  git add "$ROOT_DIR"/npm/platforms/*/package.json
 fi
 git commit -m "Release v$new_version"
 git tag "v$new_version"

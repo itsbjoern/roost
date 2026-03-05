@@ -1,0 +1,16 @@
+{
+  "name": "@itsbjoern/roost-win32-x64",
+  "version": "0.1.8",
+  "description": "Roost CLI binary for Windows x64",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/itsbjoern/roost.git"
+  },
+  "os": ["win32"],
+  "cpu": ["x64"],
+  "engines": {
+    "node": ">=18"
+  },
+  "files": ["roost.exe"]
+}
