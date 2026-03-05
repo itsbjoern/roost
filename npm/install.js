@@ -112,14 +112,24 @@ async function main() {
       cwd: binDir,
     });
 
-    const exeName = process.platform === "win32" ? "roost.exe" : "roost";
-    const binPath = path.join(binDir, exeName);
+    const extractedName = process.platform === "win32" ? "roost.exe" : "roost";
+    const extractedPath = path.join(binDir, extractedName);
 
-    const exists = fs.existsSync(binPath);
+    const exists = fs.existsSync(extractedPath);
     if (!exists) {
       throw new Error(
-        `Extracted archive did not contain expected binary at ${binPath}`
+        `Extracted archive did not contain expected binary at ${extractedPath}`
       );
+    }
+
+    // On Unix, archive contains "roost" which would overwrite the Node wrapper.
+    // Rename to roost-bin so bin/roost stays as the wrapper script.
+    let binPath;
+    if (process.platform === "win32") {
+      binPath = extractedPath; // already bin/roost.exe
+    } else {
+      binPath = path.join(binDir, "roost-bin");
+      await fs.promises.rename(extractedPath, binPath);
     }
 
     if (process.platform !== "win32") {

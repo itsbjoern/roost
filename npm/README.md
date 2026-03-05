@@ -5,15 +5,18 @@ This is the npm wrapper for the Roost CLI. It downloads a prebuilt `roost` binar
 ### Install
 
 ```bash
+# Global install — use `roost` from anywhere:
 npm install -g @itsbjoern/roost
-# or as a dependency:
+
+# Local install — use via npx:
 npm install @itsbjoern/roost
 ```
 
 Then (CLI):
 
 ```bash
-roost init
+roost init          # after global install
+npx roost init      # after local install
 ```
 
 ### JavaScript API
