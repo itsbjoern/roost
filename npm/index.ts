@@ -51,7 +51,7 @@ function getBinaryPath(): string {
 
   if (!fs.existsSync(exePath)) {
     const error = new Error(
-      "roost: binary not found. Make sure @itsbjoern/roost is installed and the postinstall step completed successfully."
+      "roost: binary not found. Make sure @itsbjoern/roost is installed and the postinstall step completed successfully.",
     ) as NodeJS.ErrnoException;
     error.code = "ENOENT";
     throw error;
@@ -62,7 +62,7 @@ function getBinaryPath(): string {
 
 export function runRoost(
   args: string[],
-  options: RunRoostOptions = {}
+  options: RunRoostOptions = {},
 ): Promise<{ stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
     const exePath = getBinaryPath();
@@ -75,16 +75,28 @@ export function runRoost(
         ...options,
       },
       (error, stdout, stderr) => {
-        const out = typeof stdout === "string" ? stdout : stdout?.toString() ?? "";
-        const err = typeof stderr === "string" ? stderr : stderr?.toString() ?? "";
+        const out =
+          typeof stdout === "string" ? stdout : (stdout?.toString() ?? "");
+        const err =
+          typeof stderr === "string" ? stderr : (stderr?.toString() ?? "");
         if (error) {
-          (error as NodeJS.ErrnoException & { stdout?: string; stderr?: string }).stdout = out;
-          (error as NodeJS.ErrnoException & { stdout?: string; stderr?: string }).stderr = err;
+          (
+            error as NodeJS.ErrnoException & {
+              stdout?: string;
+              stderr?: string;
+            }
+          ).stdout = out;
+          (
+            error as NodeJS.ErrnoException & {
+              stdout?: string;
+              stderr?: string;
+            }
+          ).stderr = err;
           reject(error);
           return;
         }
         resolve({ stdout: out, stderr: err });
-      }
+      },
     );
   });
 }
@@ -92,7 +104,7 @@ export function runRoost(
 function domainPathArgs(
   kind: "cert" | "key",
   domain: string,
-  pathOptions: PathOptionsMap = {}
+  pathOptions: PathOptionsMap = {},
 ): string[] {
   const args = ["domain", "path", kind, domain];
   if (pathOptions.generate) args.push("--generate");
@@ -104,7 +116,7 @@ function domainPathArgs(
 export async function getDomainPath(
   kind: "cert" | "key",
   domain: string,
-  options: DomainPathOptions = {}
+  options: DomainPathOptions = {},
 ): Promise<string> {
   if (kind !== "cert" && kind !== "key") {
     throw new Error(`Invalid kind "${kind}". Expected "cert" or "key".`);
@@ -131,14 +143,14 @@ export async function getDomainPath(
 
 export async function getDomainCertPath(
   domain: string,
-  options: DomainPathOptions = {}
+  options: DomainPathOptions = {},
 ): Promise<string> {
   return getDomainPath("cert", domain, options);
 }
 
 export async function getDomainKeyPath(
   domain: string,
-  options: DomainPathOptions = {}
+  options: DomainPathOptions = {},
 ): Promise<string> {
   return getDomainPath("key", domain, options);
 }
@@ -152,7 +164,7 @@ export async function getDomainKeyPath(
  */
 export async function getDomainPaths(
   domain: string,
-  options: DomainPathOptions = {}
+  options: DomainPathOptions = {},
 ): Promise<DomainPaths> {
   const [cert, key] = await Promise.all([
     getDomainCertPath(domain, options),
@@ -172,7 +184,7 @@ export async function getDomainPaths(
  */
 export async function getDomainCerts(
   domain: string,
-  options: DomainPathOptions = {}
+  options: DomainPathOptions = {},
 ): Promise<DomainCerts> {
   const paths = await getDomainPaths(domain, options);
   const [cert, key] = await Promise.all([

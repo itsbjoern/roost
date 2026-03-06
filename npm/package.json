@@ -46,9 +46,6 @@
   "engines": {
     "node": ">=18"
   },
-  "dependencies": {
-    "tar": "^7.4.3"
-  },
   "devDependencies": {
     "@types/node": "^22.10.0",
     "typescript": "^5.7.0"
