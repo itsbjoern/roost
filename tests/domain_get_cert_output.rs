@@ -78,6 +78,7 @@ fn path_with_generate_creates_domain() {
         // Domain not added yet; --generate should create it and return path
         let out = Command::cargo_bin("roost")
             .unwrap()
+            .env("ROOST_HOME", dir.path())
             .args(["domain", "path", "cert", "gen.test", "--generate"])
             .output()
             .unwrap();
