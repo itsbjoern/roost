@@ -1,6 +1,6 @@
 {
   "name": "@itsbjoern/roost",
-  "version": "0.1.9",
+  "version": "0.1.10",
   "description": "Roost CLI - local HTTPS reverse proxy with automatic cert management",
   "main": "index.js",
   "types": "index.d.ts",
@@ -8,9 +8,9 @@
     "roost": "bin/roost"
   },
   "optionalDependencies": {
-    "@itsbjoern/roost-darwin-arm64": "0.1.9",
-    "@itsbjoern/roost-linux-x64": "0.1.9",
-    "@itsbjoern/roost-win32-x64": "0.1.9"
+    "@itsbjoern/roost-darwin-arm64": "0.1.10",
+    "@itsbjoern/roost-linux-x64": "0.1.10",
+    "@itsbjoern/roost-win32-x64": "0.1.10"
   },
   "scripts": {
     "build": "tsc",
