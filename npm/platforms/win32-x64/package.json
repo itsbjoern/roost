@@ -1,6 +1,6 @@
 {
   "name": "@itsbjoern/roost-win32-x64",
-  "version": "0.1.11",
+  "version": "0.1.12",
   "description": "Roost CLI binary for Windows x64",
   "license": "MIT",
   "repository": {
