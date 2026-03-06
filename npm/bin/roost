@@ -1,71 +1,70 @@
 #!/usr/bin/env node
 
 const { platform, arch } = process;
-const { spawnSync } = require("child_process");
+const { spawn } = require("child_process");
 const path = require("path");
 const fs = require("fs");
 
 const PLATFORMS = {
-  win32: {
-    x64: "@itsbjoern/roost-win32-x64/roost.exe",
-    arm64: null,
-  },
-  darwin: {
-    x64: null,
-    arm64: "@itsbjoern/roost-darwin-arm64/roost",
-  },
-  linux: {
-    x64: "@itsbjoern/roost-linux-x64/roost",
-    arm64: null,
-  },
+	win32: {
+		x64: "@itsbjoern/roost-win32-x64/roost.exe",
+		arm64: null,
+	},
+	darwin: {
+		x64: null,
+		arm64: "@itsbjoern/roost-darwin-arm64/roost",
+	},
+	linux: {
+		x64: "@itsbjoern/roost-linux-x64/roost",
+		arm64: null,
+	},
 };
 
 const binPath =
-  PLATFORMS[platform] && PLATFORMS[platform][arch]
-    ? PLATFORMS[platform][arch]
-    : null;
+	PLATFORMS[platform] && PLATFORMS[platform][arch]
+		? PLATFORMS[platform][arch]
+		: null;
 
 const nativeName = platform === "win32" ? "roost-native.exe" : "roost-native";
 const nativePath = path.join(__dirname, nativeName);
 
+function run(binaryPath) {
+	const child = spawn(binaryPath, process.argv.slice(2), {
+		stdio: ["inherit", "pipe", "pipe"],
+		shell: false,
+	});
+	child.stdout.pipe(process.stdout);
+	child.stderr.pipe(process.stderr);
+	child.on("close", (code, signal) => {
+		process.exitCode = code != null ? code : signal ? 128 + signal : 1;
+	});
+}
+
 if (fs.existsSync(nativePath)) {
-  const result = spawnSync(nativePath, process.argv.slice(2), {
-    stdio: "inherit",
-    shell: false,
-  });
-  process.exitCode = result.status != null ? result.status : 1;
+	run(nativePath);
 } else if (binPath) {
-  try {
-    const resolved = require.resolve(binPath);
-    const result = spawnSync(resolved, process.argv.slice(2), {
-      stdio: "inherit",
-      shell: false,
-    });
-    process.exitCode = result.status != null ? result.status : 1;
-  } catch (err) {
-    // Optional dependency not installed (e.g. unsupported platform or not yet published)
-    runFallback();
-  }
+	try {
+		const resolved = require.resolve(binPath);
+		run(resolved);
+	} catch (err) {
+		runFallback();
+	}
 } else {
-  runFallback();
+	runFallback();
 }
 
 function runFallback() {
-  const nativeName = platform === "win32" ? "roost-native.exe" : "roost-native";
-  const exePath = path.join(__dirname, nativeName);
+	const nativeName = platform === "win32" ? "roost-native.exe" : "roost-native";
+	const exePath = path.join(__dirname, nativeName);
 
-  if (!fs.existsSync(exePath)) {
-    console.error(
-      "roost: binary not found for this platform.\n" +
-        "Install a prebuilt binary or build from source:\n" +
-        "  https://github.com/itsbjoern/roost#install"
-    );
-    process.exit(1);
-  }
+	if (!fs.existsSync(exePath)) {
+		console.error(
+			"roost: binary not found for this platform.\n" +
+				"Install a prebuilt binary or build from source:\n" +
+				"  https://github.com/itsbjoern/roost#install",
+		);
+		process.exit(1);
+	}
 
-  const result = spawnSync(exePath, process.argv.slice(2), {
-    stdio: "inherit",
-    shell: false,
-  });
-  process.exitCode = result.status != null ? result.status : 1;
+	run(exePath);
 }
