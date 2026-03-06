@@ -100,6 +100,9 @@ async function main() {
   const tmpDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "roost-"));
   const archivePath = path.join(tmpDir, fileName);
   const binDir = path.join(__dirname, "bin");
+  const exeName = process.platform === "win32" ? "roost.exe" : "roost";
+  const nativeBinName = process.platform === "win32" ? "roost-native.exe" : "roost-native";
+  const nativeBinPath = path.join(binDir, nativeBinName);
 
   try {
     console.log(`roost: downloading ${url}`);
@@ -109,21 +112,21 @@ async function main() {
 
     await tar.x({
       file: archivePath,
-      cwd: binDir,
+      cwd: tmpDir,
     });
 
-    const exeName = process.platform === "win32" ? "roost.exe" : "roost";
-    const binPath = path.join(binDir, exeName);
-
-    const exists = fs.existsSync(binPath);
+    const extractedPath = path.join(tmpDir, exeName);
+    const exists = fs.existsSync(extractedPath);
     if (!exists) {
       throw new Error(
-        `Extracted archive did not contain expected binary at ${binPath}`
+        `Extracted archive did not contain expected binary at ${extractedPath}`
       );
     }
 
+    await fs.promises.rename(extractedPath, nativeBinPath);
+
     if (process.platform !== "win32") {
-      await fs.promises.chmod(binPath, 0o755);
+      await fs.promises.chmod(nativeBinPath, 0o755);
     }
 
     console.log("roost: binary installed.");

@@ -25,7 +25,16 @@ const binPath =
     ? PLATFORMS[platform][arch]
     : null;
 
-if (binPath) {
+const nativeName = platform === "win32" ? "roost-native.exe" : "roost-native";
+const nativePath = path.join(__dirname, nativeName);
+
+if (fs.existsSync(nativePath)) {
+  const result = spawnSync(nativePath, process.argv.slice(2), {
+    stdio: "inherit",
+    shell: false,
+  });
+  process.exitCode = result.status != null ? result.status : 1;
+} else if (binPath) {
   try {
     const resolved = require.resolve(binPath);
     const result = spawnSync(resolved, process.argv.slice(2), {
@@ -42,8 +51,8 @@ if (binPath) {
 }
 
 function runFallback() {
-  const exeName = platform === "win32" ? "roost.exe" : "roost";
-  const exePath = path.join(__dirname, exeName);
+  const nativeName = platform === "win32" ? "roost-native.exe" : "roost-native";
+  const exePath = path.join(__dirname, nativeName);
 
   if (!fs.existsSync(exePath)) {
     console.error(

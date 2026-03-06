@@ -1,6 +1,6 @@
 ## @itsbjoern/roost
 
-CLI and JavaScript API for Roost (local HTTPS reverse proxy with automatic cert management). The package ships with platform-specific binaries (like [Biome](https://github.com/biomejs/biome)); after install you can run `roost` directly.
+CLI and JavaScript API for Roost (local HTTPS reverse proxy with automatic cert management).
 
 ### Install
 

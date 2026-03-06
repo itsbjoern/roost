@@ -16,3 +16,5 @@ npm/*.js.map
 npm/platforms/darwin-arm64/roost
 npm/platforms/linux-x64/roost
 npm/platforms/win32-x64/roost.exe
+npm/bin/roost-native
+npm/bin/roost-native.exe
