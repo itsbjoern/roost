@@ -35,19 +35,19 @@ cargo build --release
 
 ```bash
 roost init                    # One-time setup (creates CA, installs to trust store)
-roost domain add api.local    # Add a domain (creates cert, updates /etc/hosts)
-roost serve config add api.local 5001
+roost domain add example.local    # Add a domain (creates cert, updates /etc/hosts)
+roost serve config add example.local 5001
 roost serve                   # Start the proxy
 ```
 
-Visit `https://api.local` — it proxies to `http://localhost:5001`. Port 80 redirects to HTTPS.
+Visit `https://example.local` — it proxies to `http://localhost:5001`. Port 80 redirects to HTTPS.
 
 **Without root/sudo?** Use a non-privileged port:
 
 ```bash
 roost serve config ports add 8443
 roost serve
-# Visit https://api.local:8443
+# Visit https://example.local:8443
 ```
 
 ### Use certs directly in a local server (no proxy)
@@ -55,13 +55,13 @@ roost serve
 You can add a domain and use its certs in your own dev server—no proxy needed. Roost creates the cert, updates hosts, and you get the paths:
 
 ```bash
-roost domain add api.local
+roost domain add example.local
 # Get paths for your server config:
-roost domain path cert api.local   # → ~/.roost/certs/api.local.pem
-roost domain path key api.local    # → ~/.roost/certs/api.local-key.pem
+roost domain path cert example.local   # → ~/.roost/certs/example.local.pem
+roost domain path key example.local    # → ~/.roost/certs/example.local-key.pem
 
 # Create the domain if it doesn't exist:
-roost domain path cert api.local --generate
+roost domain path cert example.local --generate
 ```
 
 Point your local server at those paths. **Using the JS API** (recommended)—get the literal cert and key contents in one call:
@@ -72,11 +72,19 @@ import { defineConfig } from 'vite';
 import { getDomainCerts } from '@itsbjoern/roost';
 
 export default defineConfig(async () => {
-  const { cert, key } = await getDomainCerts('api.local', { generate: true });
+  const { cert, key } = await getDomainCerts('example.local', { generate: true });
   return {
     server: {
       https: { cert, key },
-    },
+      allowedHosts: ["example.local"],
+      // Force Vite to use HTTPS with HTTP/1.1 (not HTTP/2) so WebSocket upgrade works for HMR.
+      // When proxy is set, Vite uses https.createServer; otherwise it uses http2.createSecureServer
+      // which does not emit "upgrade", so wss:// connections fail.
+      proxy: {},
+      hmr: {
+        host: "example.local",
+        protocol: "wss",
+      },
   };
 });
 ```
@@ -88,7 +96,7 @@ const https = require('https');
 const { getDomainCerts } = require('@itsbjoern/roost');
 
 (async () => {
-  const { cert, key } = await getDomainCerts('api.local', { generate: true });
+  const { cert, key } = await getDomainCerts('example.local', { generate: true });
   const server = https.createServer(
     { cert, key },
     (req, res) => { /* ... */ }
@@ -97,7 +105,7 @@ const { getDomainCerts } = require('@itsbjoern/roost');
 })();
 ```
 
-Your dev server then serves HTTPS directly at `https://api.local:5173` using Roost's trusted certs. See [JavaScript API](#javascript-api) for all helpers.
+Your dev server then serves HTTPS directly at `https://example.local:5173` using Roost's trusted certs. See [JavaScript API](#javascript-api) for all helpers.
 
 ## What it does
 
@@ -118,7 +126,7 @@ roost serve config ports add 5173     # Add Vite, etc.
 roost serve config ports list        # Show configured ports
 ```
 
-When you use an explicit port in the URL (e.g. `https://api.local:5173`), the proxy forwards directly to that backend port.
+When you use an explicit port in the URL (e.g. `https://example.local:5173`), the proxy forwards directly to that backend port.
 
 ## Permissions
 
